@@ -138,8 +138,8 @@ with st.sidebar:
     st.markdown("### 👤 Contact")
     st.markdown("**Naziha Boussemaha**")
     st.markdown("Data Analyst")
-    st.markdown("📧 votre.email@example.com")
-    st.markdown("💼 [LinkedIn](https://linkedin.com)")
+    st.markdown("📧 contact.ethicaldataboost@gmail.com")
+    st.markdown("💼 www.linkedin.com/in/ethicaldataboost-edb-ab4064383")
 
 # ============================================================================
 # APPLIQUER LES FILTRES
