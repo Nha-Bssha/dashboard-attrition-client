@@ -1,7 +1,7 @@
 """
-Dashboard Attrition Client - Analyse Telco
-Application Streamlit par Naziha Boussemaha
-Méthodologie transposable e-commerce
+Dashboard Analyse Attrition Client - Entreprise Telco
+Reproduction exacte du dashboard Power BI
+Date: 17/02/2024
 """
 
 import streamlit as st
@@ -9,785 +9,606 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import numpy as np
+from datetime import datetime
 
 # ============================================================================
 # CONFIGURATION PAGE
 # ============================================================================
 
 st.set_page_config(
-    page_title="Dashboard Attrition Client",
-    page_icon="🔴",
+    page_title="Dashboard Telco - 17/02/2024",
+    page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# CSS personnalisé
+# ============================================================================
+# CUSTOM CSS - STYLE POWER BI
+# ============================================================================
+
 st.markdown("""
 <style>
+    /* Header principal */
     .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #E74C3C;
+        background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+        padding: 20px;
+        border-radius: 0px;
+        margin-bottom: 10px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    }
+    
+    .main-title {
+        color: white;
+        font-size: 28px;
+        font-weight: 700;
+        margin: 0;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    .sub-title {
+        color: #ecf0f1;
+        font-size: 20px;
+        font-weight: 400;
+        margin: 5px 0 0 0;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    /* Navigation tabs style Power BI */
+    .nav-container {
+        display: flex;
+        gap: 10px;
+        margin: 20px 0;
+        justify-content: center;
+    }
+    
+    .nav-tab {
+        background: #bdc3c7;
+        color: #2c3e50;
+        padding: 15px 25px;
+        clip-path: polygon(10% 0%, 100% 0%, 90% 100%, 0% 100%);
+        font-weight: 600;
+        font-size: 14px;
         text-align: center;
-        margin-bottom: 0.5rem;
+        min-width: 150px;
+        cursor: pointer;
+        transition: all 0.3s;
     }
-    .sub-header {
-        font-size: 1.2rem;
-        color: #7F8C8D;
+    
+    .nav-tab.active {
+        background: #e74c3c;
+        color: white;
+        transform: scale(1.05);
+    }
+    
+    /* KPI Cards */
+    .kpi-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 20px;
+        border-radius: 10px;
         text-align: center;
-        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        margin: 10px 0;
     }
-    .metric-card {
-        background-color: #f8f9fa;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #E74C3C;
+    
+    .kpi-card.yellow {
+        background: linear-gradient(135deg, #f39c12 0%, #e67e22 100%);
     }
-    .insight-box {
-        background-color: #fff3cd;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #ffc107;
-        margin: 1rem 0;
+    
+    .kpi-card.blue {
+        background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+    }
+    
+    .kpi-card.red {
+        background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    }
+    
+    .kpi-card.dark {
+        background: linear-gradient(135deg, #34495e 0%, #2c3e50 100%);
+    }
+    
+    .kpi-card.black {
+        background: linear-gradient(135deg, #1a1a1a 0%, #000000 100%);
+    }
+    
+    .kpi-value {
+        font-size: 48px;
+        font-weight: 700;
+        color: white;
+        margin: 0;
+        line-height: 1;
+    }
+    
+    .kpi-label {
+        font-size: 14px;
+        color: rgba(255,255,255,0.9);
+        margin-top: 8px;
+        font-weight: 500;
+    }
+    
+    /* Filtres */
+    .filter-container {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    
+    /* Hide Streamlit elements */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    
+    /* Plotly charts */
+    .js-plotly-plot {
+        border-radius: 8px;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================================================
-# CHARGEMENT DES DONNÉES
+# CHARGEMENT DONNÉES
 # ============================================================================
 
 @st.cache_data
 def load_data():
-    """Charge les données depuis le fichier CSV"""
+    """Charger et préparer les données"""
     df = pd.read_csv('telco_churn_master.csv')
     
-    # Nettoyage et typage
-    df['Churn Score'] = pd.to_numeric(df['Churn Score'], errors='coerce')
-    df['CLTV'] = pd.to_numeric(df['CLTV'], errors='coerce')
-    df['Satisfaction Score'] = pd.to_numeric(df['Satisfaction Score'], errors='coerce')
-    df['Age'] = pd.to_numeric(df['Age'], errors='coerce')
-    df['Tenure in Months'] = pd.to_numeric(df['Tenure in Months'], errors='coerce')
-    df['Monthly Charge'] = pd.to_numeric(df['Monthly Charge'], errors='coerce')
+    # Créer colonnes calculées si nécessaire
+    if 'Tranche_Age' not in df.columns:
+        df['Tranche_Age'] = pd.cut(df['Age'], 
+                                    bins=[0, 25, 32, 39, 46, 53, 60, 67, 74, 100],
+                                    labels=['18-25', '25-32', '32-39', '39-46', '46-53', 
+                                           '53-60', '60-67', '67-74', '74-81'])
     
     return df
 
 # Charger les données
-try:
-    df = load_data()
-except:
-    st.error("⚠️ Fichier telco_churn_master.csv non trouvé. Assurez-vous qu'il est dans le même dossier que l'application.")
-    st.stop()
+df = load_data()
 
 # ============================================================================
-# HEADER
+# HEADER PRINCIPAL
 # ============================================================================
 
-st.markdown('<div class="main-header">🔴 Dashboard Attrition Client</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Analyse de 7 043 clients - Secteur Télécommunications | Méthodologie transposable e-commerce</div>', unsafe_allow_html=True)
-
-st.markdown("---")
+st.markdown("""
+<div class="main-header">
+    <h1 class="main-title">Dashboard - Entreprise Telco - 17/02/2024</h1>
+</div>
+""", unsafe_allow_html=True)
 
 # ============================================================================
-# SIDEBAR - FILTRES
+# FILTRES GLOBAUX (Top Right)
 # ============================================================================
 
-with st.sidebar:
-    st.header("🎯 Filtres")
-    
-    # Filtre Statut
-    status_options = ['Tous'] + list(df['Customer Status'].unique())
-    selected_status = st.multiselect(
-        "Statut Client",
-        options=status_options,
-        default=['Tous']
+st.markdown('<div class="filter-container">', unsafe_allow_html=True)
+
+filter_cols = st.columns(5)
+
+with filter_cols[0]:
+    tranche_age_filter = st.multiselect(
+        "Tranche_Age",
+        options=['Tout'] + sorted(df['Tranche_Age'].dropna().unique().tolist()),
+        default=['Tout']
     )
-    
-    # Filtre Ville
-    city_options = ['Toutes'] + sorted(df['City'].dropna().unique().tolist())
-    selected_cities = st.multiselect(
-        "Ville",
-        options=city_options,
-        default=['Toutes']
-    )
-    
-    # Filtre Score Satisfaction
-    satisfaction_range = st.slider(
-        "Score Satisfaction",
-        min_value=1,
-        max_value=5,
-        value=(1, 5)
-    )
-    
-    # Filtre Âge
-    age_range = st.slider(
-        "Âge",
-        min_value=int(df['Age'].min()),
-        max_value=int(df['Age'].max()),
-        value=(int(df['Age'].min()), int(df['Age'].max()))
-    )
-    
-    # Filtre Tenure
-    tenure_range = st.slider(
-        "Ancienneté (mois)",
-        min_value=0,
-        max_value=int(df['Tenure in Months'].max()),
-        value=(0, int(df['Tenure in Months'].max()))
-    )
-    
-    st.markdown("---")
-    st.markdown("### 👤 Contact")
-    st.markdown("**Naziha Boussemaha**")
-    st.markdown("Data Analyst")
-    st.markdown("📧 contact.ethicaldataboost@gmail.com")
-    st.markdown("💼 www.linkedin.com/in/ethicaldataboost-edb-ab4064383")
 
-# ============================================================================
-# APPLIQUER LES FILTRES
-# ============================================================================
+with filter_cols[1]:
+    contract_filter = st.multiselect(
+        "Contract",
+        options=['Tout'] + sorted(df['Contract'].dropna().unique().tolist()),
+        default=['Tout']
+    )
 
+with filter_cols[2]:
+    city_filter = st.multiselect(
+        "City",
+        options=['Tout'] + sorted(df['City'].dropna().unique().tolist()),
+        default=['Tout']
+    )
+
+with filter_cols[3]:
+    offer_filter = st.multiselect(
+        "Offer",
+        options=['Tout'] + sorted(df['Offer'].dropna().unique().tolist()),
+        default=['Tout']
+    )
+
+with filter_cols[4]:
+    gender_filter = st.multiselect(
+        "Gender",
+        options=['Tout'] + sorted(df['Gender'].dropna().unique().tolist()),
+        default=['Tout']
+    )
+
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Appliquer les filtres
 df_filtered = df.copy()
 
-# Filtre Statut
-if 'Tous' not in selected_status and len(selected_status) > 0:
-    df_filtered = df_filtered[df_filtered['Customer Status'].isin(selected_status)]
+if 'Tout' not in tranche_age_filter and len(tranche_age_filter) > 0:
+    df_filtered = df_filtered[df_filtered['Tranche_Age'].isin(tranche_age_filter)]
 
-# Filtre Ville
-if 'Toutes' not in selected_cities and len(selected_cities) > 0:
-    df_filtered = df_filtered[df_filtered['City'].isin(selected_cities)]
+if 'Tout' not in contract_filter and len(contract_filter) > 0:
+    df_filtered = df_filtered[df_filtered['Contract'].isin(contract_filter)]
 
-# Filtre Satisfaction
-df_filtered = df_filtered[
-    (df_filtered['Satisfaction Score'] >= satisfaction_range[0]) &
-    (df_filtered['Satisfaction Score'] <= satisfaction_range[1])
-]
+if 'Tout' not in city_filter and len(city_filter) > 0:
+    df_filtered = df_filtered[df_filtered['City'].isin(city_filter)]
 
-# Filtre Âge
-df_filtered = df_filtered[
-    (df_filtered['Age'] >= age_range[0]) &
-    (df_filtered['Age'] <= age_range[1])
-]
+if 'Tout' not in offer_filter and len(offer_filter) > 0:
+    df_filtered = df_filtered[df_filtered['Offer'].isin(offer_filter)]
 
-# Filtre Tenure
-df_filtered = df_filtered[
-    (df_filtered['Tenure in Months'] >= tenure_range[0]) &
-    (df_filtered['Tenure in Months'] <= tenure_range[1])
-]
+if 'Tout' not in gender_filter and len(gender_filter) > 0:
+    df_filtered = df_filtered[df_filtered['Gender'].isin(gender_filter)]
 
 # ============================================================================
-# ONGLETS
+# NAVIGATION TABS
 # ============================================================================
 
+# Créer les tabs Streamlit (invisible, juste pour la logique)
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📊 Vue d'ensemble",
-    "👥 Comportement",
-    "⭐ Satisfaction",
-    "💰 Impact Financier",
-    "🗺️ Géographie"
+    "1️⃣ Taux d'attrition",
+    "2️⃣ Comportement du churn", 
+    "3️⃣ Satisfaction client",
+    "4️⃣ Coût du churn",
+    "5️⃣ Focus San Diego"
 ])
 
 # ============================================================================
-# TAB 1 : VUE D'ENSEMBLE
+# ONGLET 1 : TAUX D'ATTRITION
 # ============================================================================
 
 with tab1:
-    st.header("📊 Chiffres Clés")
+    st.markdown('<h2 class="sub-title">Chiffres clés de notre attrition</h2>', unsafe_allow_html=True)
     
-    # Calcul des KPIs
+    # Calculer les KPIs
     total_clients = len(df_filtered)
-    clients_churned = len(df_filtered[df_filtered['Customer Status'] == 'Churned'])
-    clients_actifs = len(df_filtered[df_filtered['Customer Status'] == 'Stayed'])
-    clients_risque = len(df_filtered[df_filtered['Churn Score'] > 60])
+    total_churned = len(df_filtered[df_filtered['Customer Status'] == 'Churned'])
+    total_joined = len(df_filtered[df_filtered['Customer Status'] == 'Joined'])
+    total_stayed = len(df_filtered[df_filtered['Customer Status'] == 'Stayed'])
+    total_installed = total_stayed + total_churned
+    solde_net = total_stayed + total_joined
     
-    taux_churn = (clients_churned / total_clients * 100) if total_clients > 0 else 0
-    taux_retention = 100 - taux_churn
+    # Afficher les 5 KPIs
+    kpi_cols = st.columns(5)
     
-    cltv_total = df_filtered['CLTV'].sum()
-    cltv_moyen = df_filtered['CLTV'].mean()
-    cltv_perdu = df_filtered[df_filtered['Customer Status'] == 'Churned']['CLTV'].sum()
+    with kpi_cols[0]:
+        st.markdown(f"""
+        <div class="kpi-card yellow">
+            <div class="kpi-value">{total_installed:,}</div>
+            <div class="kpi-label">Total clients installés</div>
+        </div>
+        """, unsafe_allow_html=True)
     
-    # Affichage KPIs
-    col1, col2, col3, col4 = st.columns(4)
+    with kpi_cols[1]:
+        st.markdown(f"""
+        <div class="kpi-card blue">
+            <div class="kpi-value">{total_joined:,}</div>
+            <div class="kpi-label">Total New Customers</div>
+        </div>
+        """, unsafe_allow_html=True)
     
-    with col1:
-        st.metric(
-            label="📉 Taux de Churn",
-            value=f"{taux_churn:.1f}%",
-            delta=f"-2.1% vs période précédente" if taux_churn < 30 else "+1.5% vs période précédente",
-            delta_color="inverse"
-        )
+    with kpi_cols[2]:
+        st.markdown(f"""
+        <div class="kpi-card red">
+            <div class="kpi-value">{total_churned:,}</div>
+            <div class="kpi-label">Nombre de Churned</div>
+        </div>
+        """, unsafe_allow_html=True)
     
-    with col2:
-        st.metric(
-            label="✅ Clients Actifs",
-            value=f"{clients_actifs:,}",
-            delta=f"{(clients_actifs / total_clients * 100):.0f}% du total"
-        )
+    with kpi_cols[3]:
+        st.markdown(f"""
+        <div class="kpi-card dark">
+            <div class="kpi-value">{total_clients:,}</div>
+            <div class="kpi-label">Total clients</div>
+        </div>
+        """, unsafe_allow_html=True)
     
-    with col3:
-        st.metric(
-            label="🔴 Clients Partis",
-            value=f"{clients_churned:,}",
-            delta=f"-{clients_churned} perdus"
-        )
-    
-    with col4:
-        st.metric(
-            label="⚠️ Risque Élevé",
-            value=f"{clients_risque:,}",
-            delta="Action urgente requise",
-            delta_color="off"
-        )
+    with kpi_cols[4]:
+        st.markdown(f"""
+        <div class="kpi-card black">
+            <div class="kpi-value">{solde_net:,}</div>
+            <div class="kpi-label">Solde net des clients actifs</div>
+        </div>
+        """, unsafe_allow_html=True)
     
     st.markdown("---")
     
-    # Graphiques
-    col1, col2 = st.columns(2)
+    # SECTION RÉPARTITION DES CHURNS
+    st.markdown("### Répartition des churns")
     
-    with col1:
-        # Evolution du churn (simulation mensuelle)
-        st.subheader("📈 Évolution du Taux de Churn")
-        months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc']
-        churn_trend = [24.2, 25.1, 26.3, 25.8, 27.1, 26.5, 25.9, 26.8, 27.2, 26.5, 25.7, 26.5]
+    row1_cols = st.columns([2, 1, 1, 2])
+    
+    with row1_cols[0]:
+        # BUBBLE CHART - Répartition par tranche d'âge
+        st.markdown("#### Répartition par tranche d'âge")
         
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=months,
-            y=churn_trend,
-            mode='lines+markers',
-            name='Taux de Churn',
-            line=dict(color='#E74C3C', width=3),
-            marker=dict(size=8)
+        age_stats = df_filtered.groupby('Tranche_Age').agg({
+            'Customer ID': 'count'
+        }).reset_index()
+        age_stats.columns = ['Tranche_Age', 'Count']
+        
+        # Créer bubble chart
+        fig = px.scatter(
+            age_stats,
+            x=[1, 2, 3, 1, 2, 3, 1, 2, 3][:len(age_stats)],
+            y=[1, 1, 1, 2, 2, 2, 3, 3, 3][:len(age_stats)],
+            size='Count',
+            color='Tranche_Age',
+            hover_data={'Tranche_Age': True, 'Count': True},
+            size_max=100,
+            color_discrete_sequence=px.colors.qualitative.Bold
+        )
+        fig.update_layout(
+            showlegend=False,
+            xaxis={'visible': False},
+            yaxis={'visible': False},
+            height=300,
+            margin=dict(l=0, r=0, t=0, b=0),
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)'
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with row1_cols[1]:
+        # DONUT - Churned/Joined/Stayed
+        status_stats = df_filtered['Customer Status'].value_counts()
+        
+        fig = go.Figure(data=[go.Pie(
+            labels=status_stats.index,
+            values=status_stats.values,
+            hole=0.6,
+            marker=dict(colors=['#e74c3c', '#3498db', '#f39c12']),
+            textposition='inside',
+            textinfo='label+percent'
+        )])
+        fig.update_layout(
+            height=300,
+            margin=dict(l=0, r=0, t=0, b=0),
+            showlegend=False
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with row1_cols[2]:
+        # DONUT - Male/Female
+        gender_stats = df_filtered['Gender'].value_counts()
+        
+        fig = go.Figure(data=[go.Pie(
+            labels=gender_stats.index,
+            values=gender_stats.values,
+            hole=0.6,
+            marker=dict(colors=['#34495e', '#e91e63']),
+            textposition='inside',
+            textinfo='label+percent'
+        )])
+        fig.update_layout(
+            height=300,
+            margin=dict(l=0, r=0, t=0, b=0),
+            showlegend=False
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with row1_cols[3]:
+        # CARTE GÉOGRAPHIQUE CALIFORNIE
+        st.markdown("#### Carte Californie")
+        
+        city_geo = df_filtered.groupby(['City', 'Latitude', 'Longitude']).agg({
+            'Customer ID': 'count',
+            'Customer Status': lambda x: (x == 'Churned').sum()
+        }).reset_index()
+        city_geo.columns = ['City', 'Latitude', 'Longitude', 'Total', 'Churned']
+        city_geo['Churn_Rate'] = (city_geo['Churned'] / city_geo['Total'] * 100).round(1)
+        city_geo_clean = city_geo.dropna(subset=['Latitude', 'Longitude'])
+        
+        if len(city_geo_clean) > 0:
+            fig = px.scatter_mapbox(
+                city_geo_clean,
+                lat='Latitude',
+                lon='Longitude',
+                size='Total',
+                color='Churn_Rate',
+                hover_name='City',
+                color_continuous_scale=['#27AE60', '#F39C12', '#E74C3C'],
+                size_max=30,
+                zoom=5.5,
+                mapbox_style='carto-darkmatter'
+            )
+            fig.update_layout(
+                height=300,
+                margin=dict(l=0, r=0, t=0, b=0)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # SECTION TAUX D'ATTRITION PAR CONTRAT ET OFFRE
+    row2_cols = st.columns(2)
+    
+    with row2_cols[0]:
+        st.markdown("#### Taux d'attrition par contrat")
+        
+        contract_stats = df_filtered.groupby('Contract').agg({
+            'Customer ID': 'count',
+            'Customer Status': lambda x: (x == 'Churned').sum()
+        }).reset_index()
+        contract_stats.columns = ['Contract', 'Total', 'Churned']
+        contract_stats['Churn_Rate'] = (contract_stats['Churned'] / contract_stats['Total'] * 100).round(0)
+        contract_stats = contract_stats.sort_values('Churn_Rate', ascending=False)
+        
+        # Couleurs selon taux
+        colors = ['#e74c3c' if x > 30 else '#3498db' if x < 10 else '#f39c12' 
+                  for x in contract_stats['Churn_Rate']]
+        
+        fig = go.Figure(go.Bar(
+            y=contract_stats['Contract'],
+            x=contract_stats['Churn_Rate'],
+            orientation='h',
+            marker=dict(color=colors),
+            text=contract_stats['Churn_Rate'].apply(lambda x: f"{x:.0f} %"),
+            textposition='inside',
+            textfont=dict(color='white', size=14, family='Arial Black')
         ))
         fig.update_layout(
-            yaxis_title="Taux de Churn (%)",
-            showlegend=False,
-            height=300
+            height=250,
+            margin=dict(l=0, r=0, t=0, b=0),
+            xaxis={'title': '', 'showgrid': False},
+            yaxis={'title': ''},
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            showlegend=False
         )
         st.plotly_chart(fig, use_container_width=True)
     
-    with col2:
-        # Répartition des statuts
-        st.subheader("🔵 Répartition des Clients")
-        status_counts = df_filtered['Customer Status'].value_counts()
+    with row2_cols[1]:
+        st.markdown("#### Taux d'attrition par offre")
         
-        fig = px.pie(
-            values=status_counts.values,
-            names=status_counts.index,
-            color_discrete_map={
-                'Stayed': '#27AE60',
-                'Churned': '#E74C3C',
-                'Joined': '#3498DB'
-            },
-            hole=0.4
+        offer_stats = df_filtered.groupby('Offer').agg({
+            'Customer ID': 'count',
+            'Customer Status': lambda x: (x == 'Churned').sum()
+        }).reset_index()
+        offer_stats.columns = ['Offer', 'Total', 'Churned']
+        offer_stats['Churn_Rate'] = (offer_stats['Churned'] / offer_stats['Total'] * 100).round(0)
+        offer_stats = offer_stats.sort_values('Churn_Rate', ascending=False)
+        
+        # Couleurs selon taux
+        colors = ['#e74c3c' if x > 40 else '#3498db' if x < 15 else '#f39c12' 
+                  for x in offer_stats['Churn_Rate']]
+        
+        fig = go.Figure(go.Bar(
+            y=offer_stats['Offer'],
+            x=offer_stats['Churn_Rate'],
+            orientation='h',
+            marker=dict(color=colors),
+            text=offer_stats['Churn_Rate'].apply(lambda x: f"{x:.0f} %"),
+            textposition='inside',
+            textfont=dict(color='white', size=14, family='Arial Black')
+        ))
+        fig.update_layout(
+            height=250,
+            margin=dict(l=0, r=0, t=0, b=0),
+            xaxis={'title': '', 'showgrid': False},
+            yaxis={'title': ''},
+            plot_bgcolor='rgba(0,0,0,0)',
+            paper_bgcolor='rgba(0,0,0,0)',
+            showlegend=False
         )
-        fig.update_layout(height=300)
         st.plotly_chart(fig, use_container_width=True)
     
     st.markdown("---")
     
-    # Churn par groupe d'âge
-    st.subheader("👥 Churn par Groupe d'Âge")
+    # TAUX DE CHURN PAR DURÉE D'ENGAGEMENT
+    st.markdown("#### Taux de churn par durée d'engagement")
     
-    df_filtered['Age_Group'] = pd.cut(
-        df_filtered['Age'],
-        bins=[0, 30, 40, 50, 60, 100],
-        labels=['<30', '30-40', '40-50', '50-60', '60+']
+    tenure_stats = df_filtered.groupby('Tenure in Months').agg({
+        'Customer ID': 'count',
+        'Customer Status': lambda x: (x == 'Churned').sum()
+    }).reset_index()
+    tenure_stats.columns = ['Tenure', 'Total', 'Churned']
+    tenure_stats['Churn_Rate'] = (tenure_stats['Churned'] / tenure_stats['Total'] * 100).round(1)
+    tenure_stats = tenure_stats.sort_values('Tenure')
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=tenure_stats['Tenure'],
+        y=tenure_stats['Churn_Rate'],
+        mode='lines+markers',
+        line=dict(color='#e74c3c', width=3),
+        marker=dict(size=6, color='#c0392b'),
+        fill='tozeroy',
+        fillcolor='rgba(231, 76, 60, 0.3)',
+        text=tenure_stats['Churn_Rate'].apply(lambda x: f"{x:.1f}%"),
+        textposition='top center',
+        textfont=dict(color='white', size=10)
+    ))
+    fig.update_layout(
+        height=300,
+        xaxis={'title': 'Tenure (in Months)', 'showgrid': True, 'gridcolor': 'rgba(255,255,255,0.1)'},
+        yaxis={'title': 'Taux de Churn (%)', 'showgrid': True, 'gridcolor': 'rgba(255,255,255,0.1)'},
+        plot_bgcolor='rgba(52, 73, 94, 0.8)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        showlegend=False,
+        margin=dict(l=50, r=20, t=20, b=50)
     )
-    
-    churn_by_age = df_filtered.groupby('Age_Group')['Customer Status'].apply(
-        lambda x: (x == 'Churned').sum() / len(x) * 100
-    ).reset_index()
-    churn_by_age.columns = ['Age_Group', 'Churn_Rate']
-    
-    fig = px.bar(
-        churn_by_age,
-        x='Age_Group',
-        y='Churn_Rate',
-        color='Churn_Rate',
-        color_continuous_scale=['#27AE60', '#F39C12', '#E74C3C'],
-        labels={'Age_Group': 'Groupe d\'Âge', 'Churn_Rate': 'Taux de Churn (%)'}
-    )
-    fig.update_layout(height=350, showlegend=False)
     st.plotly_chart(fig, use_container_width=True)
     
-    # Insight box
-    highest_churn_age = churn_by_age.loc[churn_by_age['Churn_Rate'].idxmax(), 'Age_Group']
-    st.markdown(f"""
-    <div class="insight-box">
-        <strong>💡 Insight:</strong> Le groupe d'âge <strong>{highest_churn_age}</strong> présente le taux de churn le plus élevé. 
-        Action recommandée : Programme de rétention ciblé pour ce segment.
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("---")
+    
+    # TAUX DE CHURN PAR TRANCHE D'ÂGE (Combo chart)
+    st.markdown("#### Taux de churn par tranche d'âge")
+    
+    age_churn = df_filtered.groupby('Tranche_Age').agg({
+        'Customer ID': 'count',
+        'Customer Status': lambda x: (x == 'Churned').sum(),
+        'Monthly Charge': 'mean'
+    }).reset_index()
+    age_churn.columns = ['Tranche_Age', 'Total', 'Churned', 'Avg_Monthly_Charge']
+    age_churn['Churn_Rate'] = (age_churn['Churned'] / age_churn['Total'] * 100).round(1)
+    age_churn = age_churn.dropna()
+    
+    # Créer figure avec axe secondaire
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    
+    # Barres - Taux de churn
+    colors_bars = ['#3498db' if x < 25 else '#e74c3c' if x > 35 else '#f39c12' 
+                   for x in age_churn['Churn_Rate']]
+    
+    fig.add_trace(
+        go.Bar(
+            x=age_churn['Tranche_Age'],
+            y=age_churn['Churn_Rate'],
+            name='Taux de churn',
+            marker=dict(color=colors_bars),
+            text=age_churn['Churn_Rate'].apply(lambda x: f"{x:.0f}%"),
+            textposition='outside',
+            textfont=dict(color='white', size=11)
+        ),
+        secondary_y=False
+    )
+    
+    # Ligne - Moyenne Monthly Charge
+    fig.add_trace(
+        go.Scatter(
+            x=age_churn['Tranche_Age'],
+            y=age_churn['Avg_Monthly_Charge'],
+            name='Moyenne de Monthly Charge',
+            mode='lines+markers',
+            line=dict(color='#f39c12', width=3, dash='dot'),
+            marker=dict(size=8, color='#f39c12'),
+            yaxis='y2'
+        ),
+        secondary_y=True
+    )
+    
+    fig.update_xaxes(title_text="", showgrid=False)
+    fig.update_yaxes(title_text="Taux de churn (%)", secondary_y=False, showgrid=True, gridcolor='rgba(255,255,255,0.1)')
+    fig.update_yaxes(title_text="Monthly Charge (€)", secondary_y=True, showgrid=False)
+    
+    fig.update_layout(
+        height=400,
+        plot_bgcolor='rgba(52, 73, 94, 0.8)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=50, r=50, t=50, b=50)
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
 
 # ============================================================================
-# TAB 2 : COMPORTEMENT
+# ONGLETS 2-5 : PLACEHOLDER (À COMPLÉTER)
 # ============================================================================
 
 with tab2:
-    st.header("👥 Analyse Comportementale")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Tenure vs Churn
-        st.subheader("📅 Ancienneté vs Churn")
-        
-        fig = px.scatter(
-            df_filtered,
-            x='Tenure in Months',
-            y='Churn Score',
-            color='Customer Status',
-            color_discrete_map={
-                'Stayed': '#27AE60',
-                'Churned': '#E74C3C',
-                'Joined': '#3498DB'
-            },
-            opacity=0.6,
-            labels={
-                'Tenure in Months': 'Ancienneté (mois)',
-                'Churn Score': 'Score de Churn',
-                'Customer Status': 'Statut'
-            }
-        )
-        fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        # Monthly Charge vs Churn
-        st.subheader("💳 Charge Mensuelle vs Churn")
-        
-        fig = px.box(
-            df_filtered,
-            x='Customer Status',
-            y='Monthly Charge',
-            color='Customer Status',
-            color_discrete_map={
-                'Stayed': '#27AE60',
-                'Churned': '#E74C3C',
-                'Joined': '#3498DB'
-            },
-            labels={
-                'Customer Status': 'Statut Client',
-                'Monthly Charge': 'Charge Mensuelle ($)'
-            }
-        )
-        fig.update_layout(height=400, showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    st.markdown("---")
-    
-    # Type de contrat
-    st.subheader("📝 Churn par Type de Contrat")
-    
-    contract_churn = df_filtered.groupby('Contract').agg({
-        'Customer ID': 'count',
-        'Customer Status': lambda x: (x == 'Churned').sum()
-    }).reset_index()
-    contract_churn.columns = ['Contract', 'Total', 'Churned']
-    contract_churn['Churn_Rate'] = (contract_churn['Churned'] / contract_churn['Total'] * 100).round(1)
-    
-    fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=contract_churn['Contract'],
-        y=contract_churn['Total'],
-        name='Total Clients',
-        marker_color='#3498DB'
-    ))
-    fig.add_trace(go.Bar(
-        x=contract_churn['Contract'],
-        y=contract_churn['Churned'],
-        name='Clients Partis',
-        marker_color='#E74C3C'
-    ))
-    fig.update_layout(
-        barmode='group',
-        xaxis_title="Type de Contrat",
-        yaxis_title="Nombre de Clients",
-        height=400
-    )
-    st.plotly_chart(fig, use_container_width=True)
-    
-    # Insight
-    highest_churn_contract = contract_churn.loc[contract_churn['Churn_Rate'].idxmax()]
-    st.markdown(f"""
-    <div class="insight-box">
-        <strong>💡 Insight:</strong> Les contrats <strong>{highest_churn_contract['Contract']}</strong> ont un taux de churn de 
-        <strong>{highest_churn_contract['Churn_Rate']:.1f}%</strong>. 
-        Recommandation : Incentiver la migration vers contrats longue durée.
-    </div>
-    """, unsafe_allow_html=True)
-
-# ============================================================================
-# TAB 3 : SATISFACTION
-# ============================================================================
+    st.markdown('<h2 class="sub-title">Comportement du churn</h2>', unsafe_allow_html=True)
+    st.info("🚧 Onglet en cours de construction...")
 
 with tab3:
-    st.header("⭐ Analyse de Satisfaction")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        avg_satisfaction = df_filtered['Satisfaction Score'].mean()
-        st.metric(
-            label="⭐ Satisfaction Moyenne",
-            value=f"{avg_satisfaction:.2f}/5",
-            delta="Score global"
-        )
-    
-    with col2:
-        satisfaction_churned = df_filtered[df_filtered['Customer Status'] == 'Churned']['Satisfaction Score'].mean()
-        st.metric(
-            label="🔴 Satisfaction (Partis)",
-            value=f"{satisfaction_churned:.2f}/5",
-            delta=f"{satisfaction_churned - avg_satisfaction:.2f} vs moyenne"
-        )
-    
-    with col3:
-        satisfaction_stayed = df_filtered[df_filtered['Customer Status'] == 'Stayed']['Satisfaction Score'].mean()
-        st.metric(
-            label="✅ Satisfaction (Actifs)",
-            value=f"{satisfaction_stayed:.2f}/5",
-            delta=f"+{satisfaction_stayed - avg_satisfaction:.2f} vs moyenne"
-        )
-    
-    st.markdown("---")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Distribution satisfaction
-        st.subheader("📊 Distribution Score Satisfaction")
-        
-        fig = px.histogram(
-            df_filtered,
-            x='Satisfaction Score',
-            color='Customer Status',
-            barmode='overlay',
-            color_discrete_map={
-                'Stayed': '#27AE60',
-                'Churned': '#E74C3C',
-                'Joined': '#3498DB'
-            },
-            labels={'Satisfaction Score': 'Score de Satisfaction', 'count': 'Nombre de Clients'}
-        )
-        fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        # Churn par niveau de satisfaction
-        st.subheader("🎯 Taux de Churn par Satisfaction")
-        
-        satisfaction_bins = pd.cut(df_filtered['Satisfaction Score'], bins=[0, 2, 3, 4, 5], labels=['1-2', '2-3', '3-4', '4-5'])
-        churn_by_sat = df_filtered.groupby(satisfaction_bins)['Customer Status'].apply(
-            lambda x: (x == 'Churned').sum() / len(x) * 100
-        ).reset_index()
-        churn_by_sat.columns = ['Satisfaction_Range', 'Churn_Rate']
-        
-        fig = px.line(
-            churn_by_sat,
-            x='Satisfaction_Range',
-            y='Churn_Rate',
-            markers=True,
-            labels={'Satisfaction_Range': 'Score Satisfaction', 'Churn_Rate': 'Taux de Churn (%)'}
-        )
-        fig.update_traces(line_color='#E74C3C', marker_size=12)
-        fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # Corrélation satisfaction-churn
-    low_sat_churn = len(df_filtered[(df_filtered['Satisfaction Score'] < 3) & (df_filtered['Customer Status'] == 'Churned')])
-    low_sat_total = len(df_filtered[df_filtered['Satisfaction Score'] < 3])
-    low_sat_rate = (low_sat_churn / low_sat_total * 100) if low_sat_total > 0 else 0
-    
-    st.markdown(f"""
-    <div class="insight-box">
-        <strong>💡 Insight Clé:</strong> Les clients avec satisfaction <3 ont un taux de churn de <strong>{low_sat_rate:.0f}%</strong>.
-        <br>Signal d'alerte précoce identifié : déclin satisfaction = prédicteur fort de départ.
-    </div>
-    """, unsafe_allow_html=True)
-
-# ============================================================================
-# TAB 4 : IMPACT FINANCIER
-# ============================================================================
+    st.markdown('<h2 class="sub-title">Taux de satisfaction client</h2>', unsafe_allow_html=True)
+    st.info("🚧 Onglet en cours de construction...")
 
 with tab4:
-    st.header("💰 Impact Financier du Churn")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric(
-            label="💵 CLTV Total",
-            value=f"${cltv_total:,.0f}",
-            delta="Valeur totale"
-        )
-    
-    with col2:
-        st.metric(
-            label="📊 CLTV Moyen",
-            value=f"${cltv_moyen:,.0f}",
-            delta="Par client"
-        )
-    
-    with col3:
-        st.metric(
-            label="🔴 CLTV Perdu",
-            value=f"${cltv_perdu:,.0f}",
-            delta=f"{(cltv_perdu/cltv_total*100):.1f}% du total",
-            delta_color="inverse"
-        )
-    
-    with col4:
-        potential_recovery = cltv_perdu * 0.3  # Assume 30% recoverable
-        st.metric(
-            label="💚 Potentiel Récupérable",
-            value=f"${potential_recovery:,.0f}",
-            delta="Si rétention 30%"
-        )
-    
-    st.markdown("---")
-    
-    # Raisons de churn
-    st.subheader("📋 Top Raisons de Churn")
-    
-    # Gestion robuste des données
-    churned_df = df_filtered[df_filtered['Customer Status'] == 'Churned']
-    
-    if len(churned_df) > 0 and 'Churn Category' in churned_df.columns:
-        churn_reasons = churned_df['Churn Category'].value_counts().head(5)
-        
-        if len(churn_reasons) > 0:
-            # Bar chart horizontal (plus robuste que Waterfall)
-            fig = go.Figure(go.Bar(
-                y=churn_reasons.index,
-                x=churn_reasons.values,
-                orientation='h',
-                marker=dict(color='#E74C3C'),
-                text=churn_reasons.values,
-                textposition='outside'
-            ))
-            fig.update_layout(
-                xaxis_title="Nombre de Clients",
-                yaxis_title="",
-                height=400,
-                showlegend=False,
-                margin=dict(l=150)
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("Aucune raison de churn disponible dans les données filtrées")
-    else:
-        st.info("Aucun client churné dans les données filtrées")
-    
-    st.markdown("---")
-    
-    # CLTV par statut
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("💵 Distribution CLTV par Statut")
-        
-        fig = px.violin(
-            df_filtered,
-            x='Customer Status',
-            y='CLTV',
-            color='Customer Status',
-            color_discrete_map={
-                'Stayed': '#27AE60',
-                'Churned': '#E74C3C',
-                'Joined': '#3498DB'
-            },
-            labels={'Customer Status': 'Statut', 'CLTV': 'Customer Lifetime Value ($)'}
-        )
-        fig.update_layout(height=400, showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.subheader("📊 Coût du Churn par Segment")
-        
-        # Segmentation par CLTV
-        df_filtered['CLTV_Segment'] = pd.qcut(
-            df_filtered['CLTV'],
-            q=4,
-            labels=['Faible', 'Moyen', 'Élevé', 'Premium']
-        )
-        
-        cltv_segment_loss = df_filtered[df_filtered['Customer Status'] == 'Churned'].groupby('CLTV_Segment')['CLTV'].sum().reset_index()
-        cltv_segment_loss.columns = ['Segment', 'Loss']
-        
-        fig = px.bar(
-            cltv_segment_loss,
-            x='Segment',
-            y='Loss',
-            color='Loss',
-            color_continuous_scale=['#F39C12', '#E74C3C'],
-            labels={'Segment': 'Segment CLTV', 'Loss': 'Perte Totale ($)'}
-        )
-        fig.update_layout(height=400, showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # ROI Analysis
-    avg_cltv_churned = df_filtered[df_filtered['Customer Status'] == 'Churned']['CLTV'].mean()
-    retention_improvement = clients_churned * 0.2  # Reduce churn by 20%
-    revenue_saved = retention_improvement * avg_cltv_churned
-    
-    st.markdown(f"""
-    <div class="insight-box">
-        <strong>💡 Analyse ROI:</strong> Si vous réduisez le churn de 20% (soit <strong>{retention_improvement:.0f} clients</strong> retenus),
-        <br>Économie estimée: <strong>${revenue_saved:,.0f}</strong>
-        <br>Coût dashboard: <strong>$600</strong> → ROI: <strong>{(revenue_saved/600):.0f}x</strong>
-    </div>
-    """, unsafe_allow_html=True)
-
-# ============================================================================
-# TAB 5 : GÉOGRAPHIE
-# ============================================================================
+    st.markdown('<h2 class="sub-title">Coût du Churn</h2>', unsafe_allow_html=True)
+    st.info("🚧 Onglet en cours de construction...")
 
 with tab5:
-    st.header("🗺️ Analyse Géographique - Californie")
-    
-    # Statistiques par ville AVEC vraies coordonnées GPS du CSV
-    city_stats = df_filtered.groupby(['City', 'Latitude', 'Longitude'], dropna=False).agg({
-        'Customer ID': 'count',
-        'Customer Status': lambda x: (x == 'Churned').sum()
-    }).reset_index()
-    city_stats.columns = ['City', 'Latitude', 'Longitude', 'Total_Clients', 'Churned_Clients']
-    city_stats['Churn_Rate'] = (city_stats['Churned_Clients'] / city_stats['Total_Clients'] * 100).round(1)
-    
-    # Filtrer villes avec coordonnées valides
-    city_stats_map = city_stats.dropna(subset=['Latitude', 'Longitude'])
-    
-    # 🗺️ CARTE 1: Carte Interactive Californie (Points par ville)
-    st.subheader("🗺️ Carte Interactive - Churn par Ville")
-    
-    if len(city_stats_map) > 0:
-        fig = px.scatter_mapbox(
-            city_stats_map,
-            lat='Latitude',
-            lon='Longitude',
-            size='Churned_Clients',
-            color='Churn_Rate',
-            hover_name='City',
-            hover_data={
-                'Total_Clients': ':,',
-                'Churned_Clients': ':,',
-                'Churn_Rate': ':.1f',
-                'Latitude': False,
-                'Longitude': False
-            },
-            color_continuous_scale=['#27AE60', '#F39C12', '#E74C3C'],
-            size_max=50,
-            zoom=5.5,
-            center={'lat': 34.0, 'lon': -118.5},
-            mapbox_style='carto-positron',
-            labels={
-                'Churn_Rate': 'Taux de Churn (%)',
-                'Total_Clients': 'Total Clients',
-                'Churned_Clients': 'Clients Perdus'
-            }
-        )
-        fig.update_layout(
-            height=600,
-            margin=dict(l=0, r=0, t=0, b=0)
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        
-        st.info("💡 **Lecture de la carte:** Taille des bulles = Nombre de clients perdus | Couleur = Taux de churn (Vert = Faible, Rouge = Élevé)")
-    else:
-        st.warning("Coordonnées GPS non disponibles pour les villes sélectionnées")
-    
-    st.markdown("---")
-    
-    # 📊 GRAPHIQUE BAR: Top 15 villes par taux de churn
-    st.subheader("🏙️ Top 15 Villes - Taux de Churn")
-    
-    top_15_cities = city_stats.nlargest(15, 'Churn_Rate')
-    
-    fig = px.bar(
-        top_15_cities,
-        x='City',
-        y='Churn_Rate',
-        color='Churn_Rate',
-        color_continuous_scale=['#27AE60', '#F39C12', '#E74C3C'],
-        labels={'City': 'Ville', 'Churn_Rate': 'Taux de Churn (%)'},
-        text='Churn_Rate',
-        hover_data={
-            'Total_Clients': ':,',
-            'Churned_Clients': ':,'
-        }
-    )
-    fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-    fig.update_layout(height=500, showlegend=False)
-    st.plotly_chart(fig, use_container_width=True)
-    
-    st.markdown("---")
-    
-    # 📊 Double visualisation: Absolu vs Taux
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("📊 Top 10 - Nombre Absolu de Départs")
-        top_10_absolute = city_stats.nlargest(10, 'Churned_Clients')
-        
-        fig = px.bar(
-            top_10_absolute,
-            x='Churned_Clients',
-            y='City',
-            orientation='h',
-            color='Churned_Clients',
-            color_continuous_scale='Reds',
-            labels={'City': 'Ville', 'Churned_Clients': 'Clients Perdus'},
-            text='Churned_Clients'
-        )
-        fig.update_traces(texttemplate='%{text:,}', textposition='outside')
-        fig.update_layout(height=400, showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.subheader("🎯 Top 10 - Taux de Churn")
-        top_10_rate = city_stats.nlargest(10, 'Churn_Rate')
-        
-        fig = px.bar(
-            top_10_rate,
-            x='Churn_Rate',
-            y='City',
-            orientation='h',
-            color='Churn_Rate',
-            color_continuous_scale=['#27AE60', '#F39C12', '#E74C3C'],
-            labels={'City': 'Ville', 'Churn_Rate': 'Taux de Churn (%)'},
-            text='Churn_Rate'
-        )
-        fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-        fig.update_layout(height=400, showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
-    
-    # 💡 Insight géographique
-    highest_churn_city = city_stats.nlargest(1, 'Churn_Rate').iloc[0]
-    most_churned_city = city_stats.nlargest(1, 'Churned_Clients').iloc[0]
-    
-    st.markdown(f"""
-    <div class="insight-box">
-        <strong>💡 Zones Prioritaires:</strong><br>
-        🔴 <strong>Taux le plus élevé:</strong> {highest_churn_city['City']} 
-        (<strong>{highest_churn_city['Churn_Rate']:.1f}%</strong> de churn, {int(highest_churn_city['Churned_Clients'])} clients perdus)<br>
-        📊 <strong>Volume le plus important:</strong> {most_churned_city['City']} 
-        (<strong>{int(most_churned_city['Churned_Clients'])}</strong> clients perdus, taux: {most_churned_city['Churn_Rate']:.1f}%)<br><br>
-        <strong>🎯 Action recommandée:</strong> Audit qualité service + campagne de rétention ciblée sur ces zones géographiques.
-    </div>
-    """, unsafe_allow_html=True)
-
-# ============================================================================
-# FOOTER
-# ============================================================================
-
-st.markdown("---")
-st.markdown("""
-<div style='text-align: center; color: #7F8C8D; padding: 2rem 0;'>
-    <strong>Dashboard Attrition Client</strong> | Développé par <strong>Naziha Boussemah</strong>
-    <br>Méthodologie Telco transposable e-commerce (food, cosmétiques, mode)
-    <br>📧 contact.ethicaldataboost@gmail.com | 💼 www.linkedin.com/in/ethicaldataboost-edb-ab4064383 | WhatsApp +33 6 52 22 37 83
-    <br><br>
-    <em>Cette analyse porte sur 7 043 clients sur 18 mois - Secteur Télécommunications</em>
-</div>
-""", unsafe_allow_html=True)
+    st.markdown('<h2 class="sub-title">Focus sur San Diego</h2>', unsafe_allow_html=True)
+    st.info("🚧 Onglet en cours de construction...")
