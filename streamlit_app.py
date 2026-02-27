@@ -1,7 +1,6 @@
 """
-Dashboard Attrition Client - Analyse Telco
+Dashboard Attrition Client - Data Analytics pour Telco - services de Télécommunications
 Application Streamlit par Naziha Boussemaha
-Méthodologie transposable e-commerce
 """
 
 import streamlit as st
@@ -16,7 +15,6 @@ from plotly.subplots import make_subplots
 
 st.set_page_config(
     page_title="Dashboard Attrition Client",
-    page_icon="🔴",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -83,7 +81,7 @@ except:
 # HEADER
 # ============================================================================
 
-st.markdown('<div class="main-header">🔴 Dashboard Attrition Client</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">Dashboard Attrition Client</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Analyse de 7 043 clients - Secteur Télécommunications | Méthodologie transposable e-commerce</div>', unsafe_allow_html=True)
 
 st.markdown("---")
@@ -139,8 +137,8 @@ with st.sidebar:
     st.markdown("### 👤 Contact")
     st.markdown("**Naziha Boussemaha**")
     st.markdown("Data Analyst")
-    st.markdown("📧 votre.email@example.com")
-    st.markdown("💼 [LinkedIn](https://linkedin.com)")
+    st.markdown("📧 contact.ethicaldataboost@gmail.com")
+    st.markdown("💼 www.linkedin.com/in/ethicaldataboost-edb-ab4064383")
 
 # ============================================================================
 # APPLIQUER LES FILTRES
@@ -723,7 +721,7 @@ st.markdown("""
 <div style='text-align: center; color: #7F8C8D; padding: 2rem 0;'>
     <strong>Dashboard Attrition Client</strong> | Développé par <strong>Naziha Boussemah</strong>
     <br>Méthodologie Telco transposable e-commerce (food, cosmétiques, mode)
-    <br>📧 votre.email@example.com | 💼 LinkedIn | 📞 +33 X XX XX XX XX
+    <br>📧 contact.ethicaldataboost@gmail.com | 💼 www.linkedin.com/in/ethicaldataboost-edb-ab4064383 | WhatsApp +33 6 52 22 37 83
     <br><br>
     <em>Cette analyse porte sur 7 043 clients sur 18 mois - Secteur Télécommunications</em>
 </div>
