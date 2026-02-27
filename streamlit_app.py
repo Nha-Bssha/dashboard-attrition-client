@@ -1,7 +1,7 @@
 """
-Dashboard Analyse Attrition Client - Entreprise Telco services en Télécommunications
-Reproduction exacte du dashboard réalisé sur Power BI
-Période analysée: année 2024
+Dashboard Analyse Attrition Client - Entreprise Telco
+Reproduction exacte du dashboard Power BI
+Date: 17/02/2024
 """
 
 import streamlit as st
@@ -17,7 +17,7 @@ from datetime import datetime
 # ============================================================================
 
 st.set_page_config(
-    page_title="Dashboard - Analyse du churn sur l'année 2024",
+    page_title="Dashboard Telco - 17/02/2024",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -963,11 +963,20 @@ with tab2:
 with tab3:
     st.markdown('<h2 class="sub-title">Taux de satisfaction client</h2>', unsafe_allow_html=True)
     
-    # Calculer NPS
-    promoters = len(df_filtered[df_filtered['Satisfaction Score'] >= 4])
-    detractors = len(df_filtered[df_filtered['Satisfaction Score'] <= 2])
-    total_respondents = len(df_filtered)
-    nps_score = ((promoters - detractors) / total_respondents * 100).round(2)
+    # Vérifier qu'il y a des données après filtrage
+    if len(df_filtered) == 0:
+        st.warning("⚠️ Aucune donnée disponible avec les filtres sélectionnés. Veuillez ajuster vos filtres.")
+    else:
+        # Calculer NPS avec gestion division par zéro
+        promoters = len(df_filtered[df_filtered['Satisfaction Score'] >= 4])
+        detractors = len(df_filtered[df_filtered['Satisfaction Score'] <= 2])
+        total_respondents = len(df_filtered)
+        
+        # Protection division par zéro
+        if total_respondents > 0:
+            nps_score = round((promoters - detractors) / total_respondents * 100, 2)
+        else:
+            nps_score = 0.0
     
     # ROW 1 - NPS Gauge + Satisfaction bars
     row1_cols = st.columns([1, 1, 1])
@@ -1201,10 +1210,17 @@ with tab3:
     with row4_cols[0]:
         st.markdown("#### Répartition détracteurs/passives/promoteurs")
         
-        detractors_pct = (detractors / total_respondents * 100).round(2)
-        passives = len(df_filtered[df_filtered['Satisfaction Score'] == 3])
-        passives_pct = (passives / total_respondents * 100).round(2)
-        promoters_pct = (promoters / total_respondents * 100).round(2)
+        # Protection division par zéro
+        if total_respondents > 0:
+            detractors_pct = round(detractors / total_respondents * 100, 2)
+            passives = len(df_filtered[df_filtered['Satisfaction Score'] == 3])
+            passives_pct = round(passives / total_respondents * 100, 2)
+            promoters_pct = round(promoters / total_respondents * 100, 2)
+        else:
+            detractors_pct = 0.0
+            passives_pct = 0.0
+            promoters_pct = 0.0
+            passives = 0
         
         fig = go.Figure(go.Bar(
             y=['NPS'],
