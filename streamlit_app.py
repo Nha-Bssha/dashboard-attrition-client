@@ -1,6 +1,7 @@
 """
-Dashboard Attrition Client - Data Analytics pour Telco - services de Télécommunications
+Dashboard Attrition Client - Analyse Telco
 Application Streamlit par Naziha Boussemaha
+Méthodologie transposable e-commerce
 """
 
 import streamlit as st
@@ -15,6 +16,7 @@ from plotly.subplots import make_subplots
 
 st.set_page_config(
     page_title="Dashboard Attrition Client",
+    page_icon="🔴",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -81,7 +83,7 @@ except:
 # HEADER
 # ============================================================================
 
-st.markdown('<div class="main-header">Dashboard Attrition Client</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">🔴 Dashboard Attrition Client</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-header">Analyse de 7 043 clients - Secteur Télécommunications | Méthodologie transposable e-commerce</div>', unsafe_allow_html=True)
 
 st.markdown("---")
@@ -137,8 +139,8 @@ with st.sidebar:
     st.markdown("### 👤 Contact")
     st.markdown("**Naziha Boussemaha**")
     st.markdown("Data Analyst")
-    st.markdown("📧 contact.ethicaldataboost@gmail.com")
-    st.markdown("💼 www.linkedin.com/in/ethicaldataboost-edb-ab4064383")
+    st.markdown("📧 votre.email@example.com")
+    st.markdown("💼 [LinkedIn](https://linkedin.com)")
 
 # ============================================================================
 # APPLIQUER LES FILTRES
@@ -549,23 +551,34 @@ with tab4:
     # Raisons de churn
     st.subheader("📋 Top Raisons de Churn")
     
-    churn_reasons = df_filtered[df_filtered['Customer Status'] == 'Churned']['Churn Category'].value_counts().head(5)
+    # Gestion robuste des données
+    churned_df = df_filtered[df_filtered['Customer Status'] == 'Churned']
     
-    fig = go.Figure(go.Waterfall(
-        name="Clients Perdus",
-        orientation="h",
-        measure=["relative"] * len(churn_reasons),
-        y=churn_reasons.index,
-        x=churn_reasons.values,
-        connector={"line": {"color": "rgb(63, 63, 63)"}},
-        marker={"color": "#E74C3C"}
-    ))
-    fig.update_layout(
-        xaxis_title="Nombre de Clients",
-        height=400,
-        showlegend=False
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    if len(churned_df) > 0 and 'Churn Category' in churned_df.columns:
+        churn_reasons = churned_df['Churn Category'].value_counts().head(5)
+        
+        if len(churn_reasons) > 0:
+            # Bar chart horizontal (plus robuste que Waterfall)
+            fig = go.Figure(go.Bar(
+                y=churn_reasons.index,
+                x=churn_reasons.values,
+                orientation='h',
+                marker=dict(color='#E74C3C'),
+                text=churn_reasons.values,
+                textposition='outside'
+            ))
+            fig.update_layout(
+                xaxis_title="Nombre de Clients",
+                yaxis_title="",
+                height=400,
+                showlegend=False,
+                margin=dict(l=150)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Aucune raison de churn disponible dans les données filtrées")
+    else:
+        st.info("Aucun client churné dans les données filtrées")
     
     st.markdown("---")
     
@@ -721,7 +734,7 @@ st.markdown("""
 <div style='text-align: center; color: #7F8C8D; padding: 2rem 0;'>
     <strong>Dashboard Attrition Client</strong> | Développé par <strong>Naziha Boussemah</strong>
     <br>Méthodologie Telco transposable e-commerce (food, cosmétiques, mode)
-    <br>📧 contact.ethicaldataboost@gmail.com | 💼 www.linkedin.com/in/ethicaldataboost-edb-ab4064383 | WhatsApp +33 6 52 22 37 83
+    <br>📧 votre.email@example.com | 💼 LinkedIn | 📞 +33 X XX XX XX XX
     <br><br>
     <em>Cette analyse porte sur 7 043 clients sur 18 mois - Secteur Télécommunications</em>
 </div>
