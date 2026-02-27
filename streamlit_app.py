@@ -645,27 +645,100 @@ with tab4:
 # ============================================================================
 
 with tab5:
-    st.header("🗺️ Analyse Géographique")
+    st.header("🗺️ Analyse Géographique - Californie")
     
-    # Top cities by churn rate
+    # Coordonnées GPS des principales villes de Californie
+    city_coords = {
+        'Los Angeles': (34.0522, -118.2437),
+        'San Diego': (32.7157, -117.1611),
+        'San Jose': (37.3382, -121.8863),
+        'San Francisco': (37.7749, -122.4194),
+        'Fresno': (36.7378, -119.7871),
+        'Sacramento': (38.5816, -121.4944),
+        'Long Beach': (33.7701, -118.1937),
+        'Oakland': (37.8044, -122.2712),
+        'Bakersfield': (35.3733, -119.0187),
+        'Anaheim': (33.8366, -117.9143),
+        'Santa Ana': (33.7455, -117.8677),
+        'Riverside': (33.9806, -117.3755),
+        'Stockton': (37.9577, -121.2908),
+        'Irvine': (33.6846, -117.8265),
+        'Chula Vista': (32.6401, -117.0842)
+    }
+    
+    # Statistiques par ville
     city_stats = df_filtered.groupby('City').agg({
         'Customer ID': 'count',
         'Customer Status': lambda x: (x == 'Churned').sum()
     }).reset_index()
     city_stats.columns = ['City', 'Total_Clients', 'Churned_Clients']
     city_stats['Churn_Rate'] = (city_stats['Churned_Clients'] / city_stats['Total_Clients'] * 100).round(1)
-    city_stats = city_stats.sort_values('Churn_Rate', ascending=False).head(15)
     
+    # Ajouter coordonnées GPS
+    city_stats['lat'] = city_stats['City'].map(lambda x: city_coords.get(x, (None, None))[0])
+    city_stats['lon'] = city_stats['City'].map(lambda x: city_coords.get(x, (None, None))[1])
+    
+    # Filtrer villes avec coordonnées
+    city_stats_map = city_stats.dropna(subset=['lat', 'lon'])
+    
+    # 🗺️ CARTE 1: Carte Interactive Californie (Points par ville)
+    st.subheader("🗺️ Carte Interactive - Churn par Ville")
+    
+    if len(city_stats_map) > 0:
+        fig = px.scatter_mapbox(
+            city_stats_map,
+            lat='lat',
+            lon='lon',
+            size='Churned_Clients',
+            color='Churn_Rate',
+            hover_name='City',
+            hover_data={
+                'Total_Clients': ':,',
+                'Churned_Clients': ':,',
+                'Churn_Rate': ':.1f',
+                'lat': False,
+                'lon': False
+            },
+            color_continuous_scale=['#27AE60', '#F39C12', '#E74C3C'],
+            size_max=50,
+            zoom=5,
+            center={'lat': 37.0, 'lon': -119.5},
+            mapbox_style='carto-positron',
+            labels={
+                'Churn_Rate': 'Taux de Churn (%)',
+                'Total_Clients': 'Total Clients',
+                'Churned_Clients': 'Clients Perdus'
+            }
+        )
+        fig.update_layout(
+            height=600,
+            margin=dict(l=0, r=0, t=0, b=0)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.info("💡 **Lecture de la carte:** Taille des bulles = Nombre de clients perdus | Couleur = Taux de churn (Rouge = Fort churn)")
+    else:
+        st.warning("Coordonnées GPS non disponibles pour les villes sélectionnées")
+    
+    st.markdown("---")
+    
+    # 📊 GRAPHIQUE BAR: Top 15 villes par taux de churn
     st.subheader("🏙️ Top 15 Villes - Taux de Churn")
     
+    top_15_cities = city_stats.nlargest(15, 'Churn_Rate')
+    
     fig = px.bar(
-        city_stats,
+        top_15_cities,
         x='City',
         y='Churn_Rate',
         color='Churn_Rate',
         color_continuous_scale=['#27AE60', '#F39C12', '#E74C3C'],
         labels={'City': 'Ville', 'Churn_Rate': 'Taux de Churn (%)'},
-        text='Churn_Rate'
+        text='Churn_Rate',
+        hover_data={
+            'Total_Clients': ':,',
+            'Churned_Clients': ':,'
+        }
     )
     fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
     fig.update_layout(height=500, showlegend=False)
@@ -673,55 +746,57 @@ with tab5:
     
     st.markdown("---")
     
+    # 📊 Double visualisation: Absolu vs Taux
     col1, col2 = st.columns(2)
     
     with col1:
-        # Top cities - Absolute churned
-        st.subheader("📊 Villes - Nombre Absolu de Départs")
-        top_cities_absolute = city_stats.sort_values('Churned_Clients', ascending=False).head(10)
+        st.subheader("📊 Top 10 - Nombre Absolu de Départs")
+        top_10_absolute = city_stats.nlargest(10, 'Churned_Clients')
         
         fig = px.bar(
-            top_cities_absolute,
+            top_10_absolute,
             x='Churned_Clients',
             y='City',
             orientation='h',
             color='Churned_Clients',
             color_continuous_scale='Reds',
-            labels={'City': 'Ville', 'Churned_Clients': 'Clients Partis'}
+            labels={'City': 'Ville', 'Churned_Clients': 'Clients Perdus'},
+            text='Churned_Clients'
         )
+        fig.update_traces(texttemplate='%{text:,}', textposition='outside')
         fig.update_layout(height=400, showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:
-        # State comparison
-        st.subheader("🗺️ Comparaison par État")
-        
-        state_stats = df_filtered.groupby('State').agg({
-            'Customer ID': 'count',
-            'Customer Status': lambda x: (x == 'Churned').sum()
-        }).reset_index()
-        state_stats.columns = ['State', 'Total', 'Churned']
-        state_stats['Churn_Rate'] = (state_stats['Churned'] / state_stats['Total'] * 100).round(1)
-        state_stats = state_stats.sort_values('Churn_Rate', ascending=False).head(10)
+        st.subheader("🎯 Top 10 - Taux de Churn")
+        top_10_rate = city_stats.nlargest(10, 'Churn_Rate')
         
         fig = px.bar(
-            state_stats,
-            x='State',
-            y='Churn_Rate',
+            top_10_rate,
+            x='Churn_Rate',
+            y='City',
+            orientation='h',
             color='Churn_Rate',
-            color_continuous_scale='Reds',
-            labels={'State': 'État', 'Churn_Rate': 'Taux de Churn (%)'}
+            color_continuous_scale=['#27AE60', '#F39C12', '#E74C3C'],
+            labels={'City': 'Ville', 'Churn_Rate': 'Taux de Churn (%)'},
+            text='Churn_Rate'
         )
+        fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
         fig.update_layout(height=400, showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
     
-    # Geographic insight
-    highest_churn_city = city_stats.iloc[0]
+    # 💡 Insight géographique
+    highest_churn_city = city_stats.nlargest(1, 'Churn_Rate').iloc[0]
+    most_churned_city = city_stats.nlargest(1, 'Churned_Clients').iloc[0]
+    
     st.markdown(f"""
     <div class="insight-box">
-        <strong>💡 Zone Prioritaire:</strong> La ville de <strong>{highest_churn_city['City']}</strong> affiche le taux de churn le plus élevé 
-        (<strong>{highest_churn_city['Churn_Rate']:.1f}%</strong>) avec <strong>{highest_churn_city['Churned_Clients']}</strong> clients perdus.
-        <br>Action: Audit qualité service + offre de rétention ciblée sur cette zone.
+        <strong>💡 Zones Prioritaires:</strong><br>
+        🔴 <strong>Taux le plus élevé:</strong> {highest_churn_city['City']} 
+        (<strong>{highest_churn_city['Churn_Rate']:.1f}%</strong> de churn, {int(highest_churn_city['Churned_Clients'])} clients perdus)<br>
+        📊 <strong>Volume le plus important:</strong> {most_churned_city['City']} 
+        (<strong>{int(most_churned_city['Churned_Clients'])}</strong> clients perdus, taux: {most_churned_city['Churn_Rate']:.1f}%)<br><br>
+        <strong>🎯 Action recommandée:</strong> Audit qualité service + campagne de rétention ciblée sur ces zones géographiques.
     </div>
     """, unsafe_allow_html=True)
 
@@ -732,9 +807,8 @@ with tab5:
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #7F8C8D; padding: 2rem 0;'>
-    <strong>Dashboard Attrition Client</strong> | Développé par <strong>Naziha Boussemah</strong>
-    <br>Méthodologie Telco transposable e-commerce (food, cosmétiques, mode)
-    <br>📧 votre.email@example.com | 💼 LinkedIn | 📞 +33 X XX XX XX XX
+    <strong>Dashboard Attrition Client</strong> | Développé par <strong>Naziha Boussemaha</strong>
+    <br>📧 contact.ethicaldataboost@gmail.com | 💼 www.linkedin.com/in/ethicaldataboost-edb-ab4064383 | 📞 +33 6 52 22 37 83
     <br><br>
     <em>Cette analyse porte sur 7 043 clients sur 18 mois - Secteur Télécommunications</em>
 </div>
