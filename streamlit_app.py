@@ -1,7 +1,6 @@
 """
-Dashboard Attrition Client - Analyse Telco
+Dashboard Attrition Client - Data Analytics Telco
 Application Streamlit par Naziha Boussemaha
-Méthodologie transposable e-commerce
 """
 
 import streamlit as st
