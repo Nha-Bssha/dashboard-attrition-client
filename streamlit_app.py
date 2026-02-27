@@ -2,12 +2,11 @@
 Dashboard Attrition Client - Analyse Telco
 Application Streamlit par Naziha Boussemaha
 """
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+from datetime import datetime
 
 # ============================================================================
 # CONFIGURATION PAGE
