@@ -1,6 +1,7 @@
 """
-Dashboard Attrition Client - Data Analytics Telco
+Dashboard Attrition Client - Analyse Telco
 Application Streamlit par Naziha Boussemaha
+Méthodologie transposable e-commerce
 """
 
 import streamlit as st
@@ -646,39 +647,16 @@ with tab4:
 with tab5:
     st.header("🗺️ Analyse Géographique - Californie")
     
-    # Coordonnées GPS des principales villes de Californie
-    city_coords = {
-        'Los Angeles': (34.0522, -118.2437),
-        'San Diego': (32.7157, -117.1611),
-        'San Jose': (37.3382, -121.8863),
-        'San Francisco': (37.7749, -122.4194),
-        'Fresno': (36.7378, -119.7871),
-        'Sacramento': (38.5816, -121.4944),
-        'Long Beach': (33.7701, -118.1937),
-        'Oakland': (37.8044, -122.2712),
-        'Bakersfield': (35.3733, -119.0187),
-        'Anaheim': (33.8366, -117.9143),
-        'Santa Ana': (33.7455, -117.8677),
-        'Riverside': (33.9806, -117.3755),
-        'Stockton': (37.9577, -121.2908),
-        'Irvine': (33.6846, -117.8265),
-        'Chula Vista': (32.6401, -117.0842)
-    }
-    
-    # Statistiques par ville
-    city_stats = df_filtered.groupby('City').agg({
+    # Statistiques par ville AVEC vraies coordonnées GPS du CSV
+    city_stats = df_filtered.groupby(['City', 'Latitude', 'Longitude'], dropna=False).agg({
         'Customer ID': 'count',
         'Customer Status': lambda x: (x == 'Churned').sum()
     }).reset_index()
-    city_stats.columns = ['City', 'Total_Clients', 'Churned_Clients']
+    city_stats.columns = ['City', 'Latitude', 'Longitude', 'Total_Clients', 'Churned_Clients']
     city_stats['Churn_Rate'] = (city_stats['Churned_Clients'] / city_stats['Total_Clients'] * 100).round(1)
     
-    # Ajouter coordonnées GPS
-    city_stats['lat'] = city_stats['City'].map(lambda x: city_coords.get(x, (None, None))[0])
-    city_stats['lon'] = city_stats['City'].map(lambda x: city_coords.get(x, (None, None))[1])
-    
-    # Filtrer villes avec coordonnées
-    city_stats_map = city_stats.dropna(subset=['lat', 'lon'])
+    # Filtrer villes avec coordonnées valides
+    city_stats_map = city_stats.dropna(subset=['Latitude', 'Longitude'])
     
     # 🗺️ CARTE 1: Carte Interactive Californie (Points par ville)
     st.subheader("🗺️ Carte Interactive - Churn par Ville")
@@ -686,8 +664,8 @@ with tab5:
     if len(city_stats_map) > 0:
         fig = px.scatter_mapbox(
             city_stats_map,
-            lat='lat',
-            lon='lon',
+            lat='Latitude',
+            lon='Longitude',
             size='Churned_Clients',
             color='Churn_Rate',
             hover_name='City',
@@ -695,13 +673,13 @@ with tab5:
                 'Total_Clients': ':,',
                 'Churned_Clients': ':,',
                 'Churn_Rate': ':.1f',
-                'lat': False,
-                'lon': False
+                'Latitude': False,
+                'Longitude': False
             },
             color_continuous_scale=['#27AE60', '#F39C12', '#E74C3C'],
             size_max=50,
-            zoom=5,
-            center={'lat': 37.0, 'lon': -119.5},
+            zoom=5.5,
+            center={'lat': 34.0, 'lon': -118.5},
             mapbox_style='carto-positron',
             labels={
                 'Churn_Rate': 'Taux de Churn (%)',
@@ -715,7 +693,7 @@ with tab5:
         )
         st.plotly_chart(fig, use_container_width=True)
         
-        st.info("💡 **Lecture de la carte:** Taille des bulles = Nombre de clients perdus | Couleur = Taux de churn (Rouge = Fort churn)")
+        st.info("💡 **Lecture de la carte:** Taille des bulles = Nombre de clients perdus | Couleur = Taux de churn (Vert = Faible, Rouge = Élevé)")
     else:
         st.warning("Coordonnées GPS non disponibles pour les villes sélectionnées")
     
@@ -806,8 +784,9 @@ with tab5:
 st.markdown("---")
 st.markdown("""
 <div style='text-align: center; color: #7F8C8D; padding: 2rem 0;'>
-    <strong>Dashboard Attrition Client</strong> | Développé par <strong>Naziha Boussemaha</strong>
-    <br>📧 contact.ethicaldataboost@gmail.com | 💼 www.linkedin.com/in/ethicaldataboost-edb-ab4064383 | 📞 +33 6 52 22 37 83
+    <strong>Dashboard Attrition Client</strong> | Développé par <strong>Naziha Boussemah</strong>
+    <br>Méthodologie Telco transposable e-commerce (food, cosmétiques, mode)
+    <br>📧 contact.ethicaldataboost@gmail.com | 💼 www.linkedin.com/in/ethicaldataboost-edb-ab4064383 | WhatsApp +33 6 52 22 37 83
     <br><br>
     <em>Cette analyse porte sur 7 043 clients sur 18 mois - Secteur Télécommunications</em>
 </div>
