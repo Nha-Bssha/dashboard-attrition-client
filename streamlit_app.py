@@ -29,7 +29,7 @@ warnings.filterwarnings('ignore')
 # ============================================================================
 
 st.set_page_config(
-    page_title="Dashboard Telco - Churn Analysis 17/02/2024",
+    page_title="Dashboard Telco - Analyses de l'attrition client période : 2024",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -895,11 +895,14 @@ def create_gender_donut(df: pd.DataFrame) -> Optional[go.Figure]:
 def create_california_map(df: pd.DataFrame) -> Optional[go.Figure]:
     """Créer la carte géographique de Californie"""
     try:
-        city_geo = df.groupby(['City', 'Latitude', 'Longitude']).agg({
+        # Grouper par coordonnées géographiques exactes (pas par nom de ville)
+        # Cela agrège tous les clients d'une même zone géographique
+        city_geo = df.groupby(['Latitude', 'Longitude']).agg({
             'CustomerID': 'count',
-            'Customer Status': lambda x: (x == 'Churned').sum()
+            'Customer Status': lambda x: (x == 'Churned').sum(),
+            'City': 'first'  # Prendre le premier nom de ville comme label
         }).reset_index()
-        city_geo.columns = ['City', 'Latitude', 'Longitude', 'Total', 'Churned']
+        city_geo.columns = ['Latitude', 'Longitude', 'Total', 'Churned', 'City']
         
         # Protection division par zéro
         city_geo['Churn_Rate'] = city_geo.apply(
@@ -912,30 +915,46 @@ def create_california_map(df: pd.DataFrame) -> Optional[go.Figure]:
         if len(city_geo_clean) == 0:
             return None
         
-        # TOP 3 des villes avec le PLUS GRAND NOMBRE de clients churned
-        city_geo_top3 = city_geo_clean.nlargest(3, 'Churned')
+        # Filtrer pour afficher UNIQUEMENT les clients qui ont churné
+        churned_customers = df[df['Customer Status'] == 'Churned'].copy()
         
-        if len(city_geo_top3) == 0:
+        # Nettoyer les coordonnées manquantes
+        churned_customers_clean = churned_customers.dropna(subset=['Latitude', 'Longitude'])
+        
+        if len(churned_customers_clean) == 0:
             return None
         
+        # Calculer le taux de churn par zone (pour la couleur)
+        city_churn_rate = df.groupby(['Latitude', 'Longitude']).agg({
+            'CustomerID': 'count',
+            'Customer Status': lambda x: (x == 'Churned').sum()
+        }).reset_index()
+        city_churn_rate['Churn_Rate'] = (city_churn_rate['Customer Status'] / city_churn_rate['CustomerID'] * 100)
+        
+        # Merger pour avoir le taux de churn
+        churned_customers_clean = churned_customers_clean.merge(
+            city_churn_rate[['Latitude', 'Longitude', 'Churn_Rate']],
+            on=['Latitude', 'Longitude'],
+            how='left'
+        )
+        
         fig = px.scatter_mapbox(
-            city_geo_top3,
+            churned_customers_clean,
             lat='Latitude',
             lon='Longitude',
-            size='Churned',  # TAILLE = Nombre de churned
-            color='Churn_Rate',  # COULEUR = Taux de churn
             hover_name='City',
             hover_data={
-                'Total': True, 
-                'Churned': True,
-                'Churn_Rate': ':.1f%', 
+                'CustomerID': True,
+                'Churn_Rate': ':.1f%',
                 'Latitude': False, 
                 'Longitude': False
             },
+            color='Churn_Rate',
             color_continuous_scale=['#F39C12', '#E74C3C', '#C0392B'],  # Orange → Rouge foncé
-            size_max=60,  # Bulles plus grosses pour visibilité
+            size_max=15,  # Points plus petits car il y en a beaucoup
             zoom=5.5,
-            mapbox_style='carto-darkmatter'
+            mapbox_style='carto-darkmatter',
+            opacity=0.7
         )
         
         fig.update_layout(
