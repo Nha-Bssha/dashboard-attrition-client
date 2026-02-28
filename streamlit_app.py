@@ -772,10 +772,10 @@ def create_age_bubble_chart(df: pd.DataFrame) -> Optional[go.Figure]:
         # Identifier les seniors (67-74, 74-81)
         age_stats['Is_Senior'] = age_stats['Tranche_Age'].astype(str).isin(['67-74', '74-81'])
         
-        # Calculer la taille des bulles
-        max_total = age_stats['Total'].max() if age_stats['Total'].max() > 0 else 1
-        age_stats['BubbleSize'] = age_stats['Total'].apply(
-            lambda x: max(40, (x / max_total) * 120)
+        # Calculer la taille des bulles BASÉE SUR LE TAUX DE CHURN (pas le nombre de clients)
+        max_churn_rate = age_stats['Churn_Rate'].max() if age_stats['Churn_Rate'].max() > 0 else 1
+        age_stats['BubbleSize'] = age_stats['Churn_Rate'].apply(
+            lambda x: max(30, (x / max_churn_rate) * 150)  # Plus le taux est élevé, plus la bulle est grosse
         )
         
         # Créer la figure
@@ -912,17 +912,28 @@ def create_california_map(df: pd.DataFrame) -> Optional[go.Figure]:
         if len(city_geo_clean) == 0:
             return None
         
+        # Filtrer pour afficher SEULEMENT les zones à haut taux de churn (>25%)
+        city_geo_high_churn = city_geo_clean[city_geo_clean['Churn_Rate'] >= 25].copy()
+        
+        # Si aucune ville ne dépasse 25%, prendre le top 50% des taux les plus élevés
+        if len(city_geo_high_churn) == 0:
+            median_churn = city_geo_clean['Churn_Rate'].median()
+            city_geo_high_churn = city_geo_clean[city_geo_clean['Churn_Rate'] >= median_churn].copy()
+        
+        if len(city_geo_high_churn) == 0:
+            return None
+        
         fig = px.scatter_mapbox(
-            city_geo_clean,
+            city_geo_high_churn,
             lat='Latitude',
             lon='Longitude',
-            size='Total',
+            size='Churn_Rate',  # TAILLE = Taux de churn (pas nombre de clients)
             color='Churn_Rate',
             hover_name='City',
             hover_data={'Total': True, 'Churn_Rate': ':.1f%', 
                        'Latitude': False, 'Longitude': False},
-            color_continuous_scale=['#27AE60', '#F39C12', '#E74C3C'],
-            size_max=30,
+            color_continuous_scale=['#F39C12', '#E74C3C', '#C0392B'],  # Orange → Rouge foncé
+            size_max=40,
             zoom=5.5,
             mapbox_style='carto-darkmatter'
         )
