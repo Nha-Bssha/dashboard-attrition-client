@@ -681,7 +681,7 @@ def main():
     st.markdown("""
     <div class="main-header">
         <h1 class="main-title">📊 Dashboard Telco - Analyse Attrition Client</h1>
-        <p class="sub-title">Période 2024</p>
+        <p class="sub-title">Année 2024</p>
     </div>
     """, unsafe_allow_html=True)
     
