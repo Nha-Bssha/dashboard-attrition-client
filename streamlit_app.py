@@ -1183,7 +1183,8 @@ def render_overview_tab(df: pd.DataFrame):
         total_joined = len(df[df['Customer Status'] == 'Joined'])
         total_stayed = len(df[df['Customer Status'] == 'Stayed'])
         solde_net = total_stayed + total_joined
-        total_installed = total_stayed + total_churned
+        # Total installés = Seulement les clients "Stayed" (comme Power BI)
+        total_installed = total_stayed
         
         kpi_cols = st.columns(5)
         
