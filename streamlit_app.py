@@ -1274,7 +1274,7 @@ def render_cost_tab(df: pd.DataFrame):
     st.info("🚧 En cours de développement...")
 
 def render_geography_tab(df: pd.DataFrame):
-    """Onglet Géographie avec 3 modes de visualisation"""
+    """Onglet Géographie avec 3 modes de visualisation en tabs"""
     st.markdown('<h2 class="sub-title">🗺️ Analyse Géographique du Churn en Californie</h2>', 
                 unsafe_allow_html=True)
     
@@ -1285,57 +1285,22 @@ def render_geography_tab(df: pd.DataFrame):
     </div>
     """, unsafe_allow_html=True)
     
-    # ========== SÉLECTION DU MODE ==========
     st.markdown("---")
-    mode_cols = st.columns(3)
     
-    with mode_cols[0]:
-        mode_1 = st.button(
-            "🔥 Zones Critiques",
-            use_container_width=True,
-            help="Villes qui dépassent un seuil de churn critique",
-            key='btn_mode1'
-        )
-    
-    with mode_cols[1]:
-        mode_2 = st.button(
-            "📍 Top N Villes",
-            use_container_width=True,
-            help="Les N villes avec le plus de pertes en volume",
-            key='btn_mode2'
-        )
-    
-    with mode_cols[2]:
-        mode_3 = st.button(
-            "🗺️ Vue Complète",
-            use_container_width=True,
-            help="Vision panoramique de toute la Californie",
-            key='btn_mode3'
-        )
-    
-    # Déterminer le mode actif (par défaut Mode 1)
-    if 'geo_mode' not in st.session_state:
-        st.session_state.geo_mode = 1
-    
-    if mode_1:
-        st.session_state.geo_mode = 1
-    elif mode_2:
-        st.session_state.geo_mode = 2
-    elif mode_3:
-        st.session_state.geo_mode = 3
-    
-    current_mode = st.session_state.geo_mode
-    
-    st.markdown("---")
+    # ========== NAVIGATION PAR TABS ==========
+    geo_tabs = st.tabs([
+        "🔥 Zones Critiques",
+        "📍 Top N Villes", 
+        "🗺️ Vue Complète"
+    ])
     
     # ========== MODE 1: ZONES CRITIQUES ==========
-    if current_mode == 1:
-        st.markdown("### 🔥 Mode: Zones Critiques")
+    with geo_tabs[0]:
         st.markdown("""
-        <div class="description-box" style="background: rgba(243, 156, 18, 0.1); 
-             border-left: 4px solid #f39c12; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+        <div style="background: rgba(243, 156, 18, 0.1); border-left: 4px solid #f39c12; 
+                    padding: 15px; margin: 20px 0; border-radius: 5px;">
             <h4 style="color: #f39c12; margin-bottom: 8px;">🎯 Objectif métier</h4>
-            <p style="color: #ecf0f1; font-size: 14px;">
+            <p style="color: #ecf0f1; font-size: 14px; margin: 0;">
                 Identifier rapidement les <strong>zones en crise</strong> dépassant un seuil de churn critique. 
                 Permet de prioriser les actions terrain sur les villes nécessitant une intervention urgente.
             </p>
@@ -1351,7 +1316,8 @@ def render_geography_tab(df: pd.DataFrame):
                 max_value=50,
                 value=30,
                 step=5,
-                key='threshold_mode1'
+                key='threshold_mode1',
+                help="Affiche uniquement les villes dépassant ce seuil"
             )
         
         with control_cols[1]:
@@ -1359,7 +1325,8 @@ def render_geography_tab(df: pd.DataFrame):
                 "📊 Taille des bulles",
                 options=['Volume churned', 'Taux de churn'],
                 horizontal=True,
-                key='size_mode1'
+                key='size_mode1',
+                help="Choisir la métrique pour dimensionner les bulles"
             )
         
         # Créer la carte
@@ -1368,13 +1335,12 @@ def render_geography_tab(df: pd.DataFrame):
             st.plotly_chart(fig, use_container_width=True, key='geo_map_mode1')
     
     # ========== MODE 2: TOP N VILLES ==========
-    elif current_mode == 2:
-        st.markdown("### 📍 Mode: Top N Villes")
+    with geo_tabs[1]:
         st.markdown("""
-        <div class="description-box" style="background: rgba(243, 156, 18, 0.1); 
-             border-left: 4px solid #f39c12; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+        <div style="background: rgba(243, 156, 18, 0.1); border-left: 4px solid #f39c12; 
+                    padding: 15px; margin: 20px 0; border-radius: 5px;">
             <h4 style="color: #f39c12; margin-bottom: 8px;">🎯 Objectif métier</h4>
-            <p style="color: #ecf0f1; font-size: 14px;">
+            <p style="color: #ecf0f1; font-size: 14px; margin: 0;">
                 Focaliser l'analyse sur les <strong>N villes avec le plus de pertes</strong> en volume absolu. 
                 Répond à la question : "Où perdons-nous le PLUS de clients ?"
             </p>
@@ -1390,7 +1356,8 @@ def render_geography_tab(df: pd.DataFrame):
                 max_value=15,
                 value=5,
                 step=1,
-                key='topn_mode2'
+                key='topn_mode2',
+                help="Sélectionner le nombre de villes à afficher"
             )
         
         with control_cols[1]:
@@ -1398,7 +1365,8 @@ def render_geography_tab(df: pd.DataFrame):
                 "📊 Trier par",
                 options=['Volume churned', 'Taux de churn'],
                 horizontal=True,
-                key='sort_mode2'
+                key='sort_mode2',
+                help="Critère de tri pour sélectionner le Top N"
             )
         
         # Créer la carte
@@ -1407,13 +1375,12 @@ def render_geography_tab(df: pd.DataFrame):
             st.plotly_chart(fig, use_container_width=True, key='geo_map_mode2')
     
     # ========== MODE 3: VUE COMPLÈTE ==========
-    else:
-        st.markdown("### 🗺️ Mode: Vue Complète")
+    with geo_tabs[2]:
         st.markdown("""
-        <div class="description-box" style="background: rgba(243, 156, 18, 0.1); 
-             border-left: 4px solid #f39c12; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+        <div style="background: rgba(243, 156, 18, 0.1); border-left: 4px solid #f39c12; 
+                    padding: 15px; margin: 20px 0; border-radius: 5px;">
             <h4 style="color: #f39c12; margin-bottom: 8px;">🎯 Objectif métier</h4>
-            <p style="color: #ecf0f1; font-size: 14px;">
+            <p style="color: #ecf0f1; font-size: 14px; margin: 0;">
                 Vision <strong>panoramique</strong> de toute la Californie avec toutes les villes ayant du churn. 
                 Permet d'identifier les clusters géographiques et patterns de distribution.
             </p>
@@ -1429,17 +1396,19 @@ def render_geography_tab(df: pd.DataFrame):
                 max_value=20,
                 value=1,
                 step=1,
-                key='min_mode3'
+                key='min_mode3',
+                help="Filtrer les villes avec au moins N clients churned"
             )
         
         with control_cols[1]:
             opacity = st.slider(
-                '👁️ Opacité des bulles',
+                '👁️ Opacité des bulles (%)',
                 min_value=30,
                 max_value=100,
                 value=70,
                 step=10,
-                key='opacity_mode3'
+                key='opacity_mode3',
+                help="Ajuster la transparence pour mieux voir les superpositions"
             )
         
         # Créer la carte
