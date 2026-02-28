@@ -246,11 +246,11 @@ if 'Tout' not in gender_filter and len(gender_filter) > 0:
 
 # Créer les tabs Streamlit (invisible, juste pour la logique)
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "1️⃣ Taux d'attrition",
-    "2️⃣ Comportement du churn", 
-    "3️⃣ Satisfaction client",
-    "4️⃣ Coût du churn",
-    "5️⃣ Focus San Diego"
+    "📈 Vue d'ensemble", 
+    "🔄 Comportement du Churn", 
+    "😊 Satisfaction",
+    "💰 Coût du Churn",
+    "🔥 Focus Ville Critique"
 ])
 
 # ============================================================================
@@ -320,44 +320,44 @@ with tab1:
     
     with row1_cols[0]:
         # BUBBLE CHART - Répartition des churns par tranche d'âge
-        st.markdown("#### Répartition des churns par tranche d'âge")
+        st.markdown("#### 📊 Répartition des churns par tranche d'âge")
         
         # FOCUS SUR CHURNED UNIQUEMENT
         age_churned = df_filtered[df_filtered['Customer Status'] == 'Churned'].groupby('Tranche_Age').size().reset_index(name='Count')
-        age_churned = age_churned.dropna()
+        age_churned = age_churned.dropna().sort_values('Tranche_Age')
         
         if len(age_churned) > 0:
             # Emphasis sur seniors (67-74 et 74-81)
             age_churned['Is_Senior'] = age_churned['Tranche_Age'].isin(['67-74', '74-81'])
-            colors = ['#e74c3c' if x else '#3498db' for x in age_churned['Is_Senior']]
             
             fig = go.Figure()
             
+            # VRAIES BULLES VISIBLES avec axes
             fig.add_trace(go.Scatter(
-                x=[i for i in range(len(age_churned))],
-                y=[1] * len(age_churned),
+                x=age_churned['Tranche_Age'].astype(str),
+                y=age_churned['Count'],
                 mode='markers+text',
                 marker=dict(
-                    size=age_churned['Count'],
-                    sizemode='diameter',
-                    sizeref=2.*max(age_churned['Count'])/(100.**2),
-                    color=colors,
-                    line=dict(width=3, color='white')
+                    size=age_churned['Count'] * 1.8,  # Taille amplifiée pour visibilité
+                    color=['#ff6b6b' if s else '#4ecdc4' for s in age_churned['Is_Senior']],
+                    line=dict(width=3, color='white'),
+                    opacity=0.85
                 ),
-                text=age_churned['Tranche_Age'].astype(str) + '<br>' + age_churned['Count'].astype(str),
+                text=age_churned['Count'].astype(str),
                 textposition='middle center',
-                textfont=dict(size=14, color='white', family='Arial Black'),
-                hovertemplate='<b>%{text}</b><br>Clients churned<extra></extra>'
+                textfont=dict(size=18, color='white', family='Arial Black'),
+                hovertemplate='<b>%{x}</b><br>Churned: %{y}<extra></extra>'
             ))
             
             fig.update_layout(
-                height=300,
+                height=350,
                 showlegend=False,
-                xaxis={'visible': False},
-                yaxis={'visible': False},
                 plot_bgcolor='rgba(52, 73, 94, 0.8)',
                 paper_bgcolor='rgba(0,0,0,0)',
-                margin=dict(l=0, r=0, t=10, b=0)
+                xaxis={'title': 'Tranche d\'âge', 'showgrid': False, 'color': 'white', 'tickangle': -45},
+                yaxis={'title': 'Clients churned', 'showgrid': True, 'gridcolor': 'rgba(255,255,255,0.1)', 'color': 'white'},
+                font=dict(color='white'),
+                margin=dict(l=50, r=20, t=30, b=80)
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -1512,6 +1512,105 @@ with tab4:
         
         st.markdown("---")
         
+        # COURBE DE LORENZ + GINI - Concentration CA par clients
+        st.markdown("### 📈 Concentration du CA parmi les clients")
+        
+        row_lorenz = st.columns([2, 1])
+        
+        with row_lorenz[0]:
+            st.markdown("#### Courbe de Lorenz")
+            
+            # Calculer courbe de Lorenz
+            ca_sorted = df_filtered.sort_values('Total Revenue')['Total Revenue'].values
+            if len(ca_sorted) > 0:
+                cumsum_ca = np.cumsum(ca_sorted)
+                cumsum_ca = cumsum_ca / cumsum_ca[-1] * 100  # En %
+                cumsum_clients = np.arange(1, len(ca_sorted) + 1) / len(ca_sorted) * 100
+                
+                # Coefficient de Gini
+                gini = 1 - 2 * np.trapz(cumsum_ca / 100, cumsum_clients / 100)
+                
+                fig = go.Figure()
+                
+                # Ligne d'égalité parfaite (diagonale)
+                fig.add_trace(go.Scatter(
+                    x=[0, 100],
+                    y=[0, 100],
+                    mode='lines',
+                    name='Égalité parfaite',
+                    line=dict(color='#95a5a6', width=2, dash='dash'),
+                    hoverinfo='skip'
+                ))
+                
+                # Courbe de Lorenz réelle
+                fig.add_trace(go.Scatter(
+                    x=cumsum_clients,
+                    y=cumsum_ca,
+                    mode='lines',
+                    name='Distribution réelle',
+                    line=dict(color='#ff6b6b', width=4),
+                    fill='tonexty',
+                    fillcolor='rgba(255, 107, 107, 0.2)',
+                    hovertemplate='<b>%{x:.0f}%</b> clients<br>%{y:.0f}% du CA<extra></extra>'
+                ))
+                
+                # Annotation Gini
+                fig.add_annotation(
+                    x=50, y=30,
+                    text=f"<b>Coefficient de Gini</b><br>{gini:.3f}",
+                    showarrow=False,
+                    font=dict(size=18, color='white', family='Arial Black'),
+                    bgcolor='rgba(102, 126, 234, 0.8)',
+                    bordercolor='white',
+                    borderwidth=2,
+                    borderpad=10
+                )
+                
+                fig.update_layout(
+                    height=400,
+                    plot_bgcolor='rgba(52, 73, 94, 0.8)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    xaxis={'title': '% Clients cumulés (du plus pauvre au plus riche)', 
+                           'showgrid': True, 'gridcolor': 'rgba(255,255,255,0.1)', 'color': 'white'},
+                    yaxis={'title': '% CA cumulé', 'showgrid': True, 
+                           'gridcolor': 'rgba(255,255,255,0.1)', 'color': 'white'},
+                    font=dict(color='white'),
+                    showlegend=True,
+                    legend=dict(x=0.02, y=0.98, bgcolor='rgba(0,0,0,0.5)', font=dict(color='white')),
+                    margin=dict(l=60, r=20, t=30, b=60)
+                )
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with row_lorenz[1]:
+            st.markdown("#### 💡 Interprétation")
+            
+            if gini < 0.3:
+                interpretation = "🟢 **Faible inégalité**\n\nCA bien réparti entre clients"
+            elif gini < 0.5:
+                interpretation = "🟡 **Inégalité modérée**\n\nQuelques clients concentrent le CA"
+            else:
+                interpretation = "🔴 **Forte inégalité**\n\nPeu de clients génèrent l'essentiel du CA"
+            
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, rgba(102,126,234,0.2) 0%, rgba(118,75,162,0.2) 100%);
+                        padding: 30px; border-radius: 15px; border: 2px solid rgba(255,255,255,0.1);">
+                <h3 style="color: white; margin-bottom: 20px;">Coefficient de Gini</h3>
+                <div style="font-size: 48px; font-weight: 900; color: #ffd93d; text-align: center; margin: 20px 0;">
+                    {gini:.3f}
+                </div>
+                <p style="color: rgba(255,255,255,0.9); font-size: 16px; line-height: 1.6;">
+                    {interpretation}
+                </p>
+                <hr style="border-color: rgba(255,255,255,0.2); margin: 20px 0;">
+                <p style="color: rgba(255,255,255,0.7); font-size: 14px; font-style: italic;">
+                    0 = égalité parfaite<br>
+                    1 = inégalité maximale
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
         # ROW 2 - CA par Contrat + CA par Offre
         row2_cols = st.columns(2)
         
@@ -1695,7 +1794,7 @@ with tab4:
         row4_cols = st.columns([3, 2])
         
         with row4_cols[0]:
-            st.markdown("#### 🗺️ Cartographie du CA par zone (Californie)")
+            st.markdown("#### 🗺️ Top 10 Villes par CA - Cartographie")
             
             ca_geo = df_filtered.groupby(['City', 'Latitude', 'Longitude']).agg({
                 'Total Revenue': 'sum',
@@ -1705,27 +1804,50 @@ with tab4:
             ca_geo.columns = ['City', 'Latitude', 'Longitude', 'CA', 'Total', 'Churned']
             ca_geo['CA_M'] = (ca_geo['CA'] / 1_000_000).round(2)
             ca_geo['Churn_Rate'] = (ca_geo['Churned'] / ca_geo['Total'] * 100).round(1)
-            ca_geo_clean = ca_geo.dropna(subset=['Latitude', 'Longitude'])
             
-            if len(ca_geo_clean) > 0:
+            # TOP 10 VILLES UNIQUEMENT
+            top10_ca_geo = ca_geo.nlargest(10, 'CA_M').dropna(subset=['Latitude', 'Longitude'])
+            
+            if len(top10_ca_geo) > 0:
                 fig = px.scatter_mapbox(
-                    ca_geo_clean,
+                    top10_ca_geo,
                     lat='Latitude',
                     lon='Longitude',
                     size='CA_M',
-                    color='Churn_Rate',
+                    color='CA_M',
                     hover_name='City',
-                    hover_data={'CA_M': ':.2f', 'Churn_Rate': ':.1f', 'Latitude': False, 'Longitude': False},
-                    color_continuous_scale=['#27AE60', '#f39c12', '#e74c3c'],
-                    size_max=40,
+                    hover_data={'CA_M': ':.2f M€', 'Total': True, 'Churn_Rate': ':.1f%',
+                               'Latitude': False, 'Longitude': False},
+                    color_continuous_scale='Viridis',  # Palette professionnelle jaune-vert-bleu
+                    size_max=60,
                     zoom=5.5,
                     center={'lat': 36.7783, 'lon': -119.4179},
-                    mapbox_style='carto-darkmatter'
+                    mapbox_style='carto-darkmatter',
+                    labels={'CA_M': 'CA (M€)'}
                 )
+                
+                # Ajouter labels texte des villes
+                fig.add_trace(go.Scattermapbox(
+                    lat=top10_ca_geo['Latitude'],
+                    lon=top10_ca_geo['Longitude'],
+                    mode='text',
+                    text=top10_ca_geo['City'],
+                    textfont=dict(size=12, color='white', family='Arial Black'),
+                    hoverinfo='skip',
+                    showlegend=False
+                ))
+                
                 fig.update_layout(
-                    height=400,
-                    margin=dict(l=0, r=0, t=0, b=0),
-                    coloraxis_colorbar=dict(title="Churn %")
+                    height=500,
+                    margin=dict(l=0, r=0, t=30, b=0),
+                    coloraxis_colorbar=dict(
+                        title="CA (M€)",
+                        ticksuffix=" M€",
+                        bgcolor='rgba(0,0,0,0.5)',
+                        tickfont=dict(color='white'),
+                        titlefont=dict(color='white')
+                    ),
+                    font=dict(color='white')
                 )
                 st.plotly_chart(fig, use_container_width=True)
         
@@ -1760,7 +1882,7 @@ with tab4:
 
 
 with tab5:
-    st.markdown('<h2 class="sub-title">🔥 Focus SAN DIEGO - Ville Critique (Churn 64.9%)</h2>', unsafe_allow_html=True)
+    st.markdown('<h2 class="sub-title">🔥 Focus Ville Critique - San Diego (Churn le plus élevé)</h2>', unsafe_allow_html=True)
     
     # Filtrer San Diego uniquement
     df_san_diego = df_filtered[df_filtered['City'] == 'San Diego'].copy()
