@@ -29,7 +29,7 @@ warnings.filterwarnings('ignore')
 # ============================================================================
 
 st.set_page_config(
-    page_title="Dashboard Telco - Analyses de l'attrition client période : 2024",
+    page_title="Dashboard Telco Premium - 17/02/2024",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -915,46 +915,37 @@ def create_california_map(df: pd.DataFrame) -> Optional[go.Figure]:
         if len(city_geo_clean) == 0:
             return None
         
-        # Filtrer pour afficher UNIQUEMENT les clients qui ont churné
-        churned_customers = df[df['Customer Status'] == 'Churned'].copy()
+        # Grouper par zone géographique et compter les churned
+        city_geo_clean = city_geo.dropna(subset=['Latitude', 'Longitude'])
         
-        # Nettoyer les coordonnées manquantes
-        churned_customers_clean = churned_customers.dropna(subset=['Latitude', 'Longitude'])
-        
-        if len(churned_customers_clean) == 0:
+        if len(city_geo_clean) == 0:
             return None
         
-        # Calculer le taux de churn par zone (pour la couleur)
-        city_churn_rate = df.groupby(['Latitude', 'Longitude']).agg({
-            'CustomerID': 'count',
-            'Customer Status': lambda x: (x == 'Churned').sum()
-        }).reset_index()
-        city_churn_rate['Churn_Rate'] = (city_churn_rate['Customer Status'] / city_churn_rate['CustomerID'] * 100)
+        # Afficher TOUTES les villes qui ont des churned
+        city_with_churn = city_geo_clean[city_geo_clean['Churned'] > 0].copy()
         
-        # Merger pour avoir le taux de churn
-        churned_customers_clean = churned_customers_clean.merge(
-            city_churn_rate[['Latitude', 'Longitude', 'Churn_Rate']],
-            on=['Latitude', 'Longitude'],
-            how='left'
-        )
+        if len(city_with_churn) == 0:
+            return None
         
         fig = px.scatter_mapbox(
-            churned_customers_clean,
+            city_with_churn,
             lat='Latitude',
             lon='Longitude',
+            size='Churned',  # TAILLE = Nombre de churned (plus il y a de pertes, plus c'est gros)
+            color='Churn_Rate',  # COULEUR = Taux de churn (intensité du problème)
             hover_name='City',
             hover_data={
-                'CustomerID': True,
-                'Churn_Rate': ':.1f%',
-                'Latitude': False, 
-                'Longitude': False
+                'Total': True,  # Nombre total de clients
+                'Churned': True,  # Nombre de churned
+                'Churn_Rate': ':.1f%',  # Taux de churn
+                'Latitude': False,  # Masquer coordonnées
+                'Longitude': False  # Masquer coordonnées
+                # PAS de CustomerID (RGPD)
             },
-            color='Churn_Rate',
             color_continuous_scale=['#F39C12', '#E74C3C', '#C0392B'],  # Orange → Rouge foncé
-            size_max=15,  # Points plus petits car il y en a beaucoup
+            size_max=50,  # Bulles visibles
             zoom=5.5,
-            mapbox_style='carto-darkmatter',
-            opacity=0.7
+            mapbox_style='carto-darkmatter'
         )
         
         fig.update_layout(
