@@ -319,55 +319,77 @@ with tab1:
     row1_cols = st.columns([2, 1, 1, 2])
     
     with row1_cols[0]:
-        # BUBBLE CHART - Répartition des churns par tranche d'âge
-        st.markdown("#### 📊 Répartition des churns par tranche d'âge")
+        # BUBBLE CHART - TAUX DE CHURN PAR TRANCHE D'ÂGE
+        st.markdown("#### 📊 Taux de Churn par Tranche d'Âge")
         
-        # FOCUS SUR CHURNED UNIQUEMENT
-        age_churned = df_filtered[df_filtered['Customer Status'] == 'Churned'].groupby('Tranche_Age').size().reset_index(name='Count')
-        age_churned = age_churned.dropna().sort_values('Tranche_Age')
+        # Calculer TAUX DE CHURN % par tranche d'âge
+        age_stats = df_filtered.groupby('Tranche_Age').agg({
+            'Customer ID': 'count',
+            'Customer Status': lambda x: (x == 'Churned').sum()
+        }).reset_index()
+        age_stats.columns = ['Tranche_Age', 'Total', 'Churned']
+        age_stats['Churn_Rate'] = (age_stats['Churned'] / age_stats['Total'] * 100).round(1)
+        age_stats = age_stats.dropna().sort_values('Tranche_Age')
         
-        if len(age_churned) > 0:
+        if len(age_stats) > 0:
             # Emphasis sur seniors (67-74 et 74-81)
-            age_churned['Is_Senior'] = age_churned['Tranche_Age'].isin(['67-74', '74-81'])
+            age_stats['Is_Senior'] = age_stats['Tranche_Age'].isin(['67-74', '74-81'])
             
-            # Calculer tailles de bulles (minimum 20, maximum basé sur les données)
-            max_count = age_churned['Count'].max()
-            age_churned['BubbleSize'] = age_churned['Count'].apply(
-                lambda x: max(30, (x / max_count) * 100)  # Taille min 30, max 100
+            # Taille des bulles = proportionnelle au nombre total de clients
+            max_total = age_stats['Total'].max()
+            age_stats['BubbleSize'] = age_stats['Total'].apply(
+                lambda x: max(40, (x / max_total) * 120)  # Taille min 40, max 120
             )
             
             fig = go.Figure()
             
-            # VRAIES BULLES VISIBLES avec axes
+            # BULLES : X = Tranche d'âge, Y = TAUX DE CHURN %, Taille = Volume clients
             fig.add_trace(go.Scatter(
-                x=age_churned['Tranche_Age'].astype(str),
-                y=age_churned['Count'],
+                x=age_stats['Tranche_Age'].astype(str),
+                y=age_stats['Churn_Rate'],
                 mode='markers+text',
                 marker=dict(
-                    size=age_churned['BubbleSize'],  # Tailles garanties visibles
-                    color=['#ff6b6b' if s else '#4ecdc4' for s in age_churned['Is_Senior']],
+                    size=age_stats['BubbleSize'],
+                    color=['#e74c3c' if s else '#3498db' for s in age_stats['Is_Senior']],
                     line=dict(width=3, color='white'),
                     opacity=0.85
                 ),
-                text=age_churned['Count'].astype(str),
+                text=age_stats['Churn_Rate'].apply(lambda x: f"{x:.1f}%"),
                 textposition='middle center',
-                textfont=dict(size=18, color='white', family='Arial Black'),
-                hovertemplate='<b>%{x}</b><br>Churned: %{y}<extra></extra>'
+                textfont=dict(size=16, color='white', family='Arial Black'),
+                hovertemplate='<b>%{x}</b><br>' +
+                             'Taux Churn: <b>%{y:.1f}%</b><br>' +
+                             'Total clients: ' + age_stats['Total'].astype(str) + '<br>' +
+                             'Churned: ' + age_stats['Churned'].astype(str) +
+                             '<extra></extra>'
             ))
             
             fig.update_layout(
-                height=350,
+                height=400,
                 showlegend=False,
-                plot_bgcolor='rgba(52, 73, 94, 0.8)',
+                plot_bgcolor='rgba(26, 26, 46, 0.95)',
                 paper_bgcolor='rgba(0,0,0,0)',
-                xaxis={'title': 'Tranche d\'âge', 'showgrid': False, 'color': 'white', 'tickangle': -45},
-                yaxis={'title': 'Clients churned', 'showgrid': True, 'gridcolor': 'rgba(255,255,255,0.1)', 'color': 'white'},
-                font=dict(color='white'),
-                margin=dict(l=50, r=20, t=30, b=80)
+                xaxis={
+                    'title': 'Tranche d\'âge', 
+                    'showgrid': False, 
+                    'color': 'white', 
+                    'tickangle': -45,
+                    'tickfont': dict(size=12, family='Arial')
+                },
+                yaxis={
+                    'title': 'Taux de Churn (%)', 
+                    'showgrid': True, 
+                    'gridcolor': 'rgba(255,255,255,0.1)', 
+                    'color': 'white',
+                    'ticksuffix': '%',
+                    'tickfont': dict(size=12, family='Arial')
+                },
+                font=dict(color='white', family='Arial'),
+                margin=dict(l=60, r=20, t=30, b=90)
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("Aucun client churned avec les filtres actuels")
+            st.info("Aucune donnée disponible avec les filtres actuels")
     
     with row1_cols[1]:
         # DONUT - Churned/Joined/Stayed
@@ -1540,7 +1562,11 @@ with tab4:
                 cumsum_clients_pct = (np.arange(len(ca_sorted) + 1) / len(ca_sorted)) * 100
                 
                 # Coefficient de Gini (aire entre courbe et diagonale)
-                gini = 1 - 2 * np.trapz(cumsum_ca_pct / 100, cumsum_clients_pct / 100)
+                # Utilise trapezoid (NumPy 2.0+) ou trapz (NumPy <2.0)
+                try:
+                    gini = 1 - 2 * np.trapezoid(cumsum_ca_pct / 100, cumsum_clients_pct / 100)
+                except AttributeError:
+                    gini = 1 - 2 * np.trapz(cumsum_ca_pct / 100, cumsum_clients_pct / 100)
                 
                 fig = go.Figure()
                 
