@@ -1599,8 +1599,142 @@ def render_mode1_visuals(df: pd.DataFrame, threshold: int, max_cities: int):
     except Exception as e:
         st.error(f"Erreur Mode 1: {str(e)}")
 
+def calculate_financial_impact(city_stats: pd.DataFrame, cltv: float = 3500):
+    """Calcule l'impact financier avec CLTV"""
+    total_churned = city_stats['Churned'].sum()
+    total_loss = total_churned * cltv
+    
+    # ROI si rétention de 30%
+    retained_clients = int(total_churned * 0.30)
+    revenue_saved = retained_clients * cltv
+    
+    return {
+        'total_churned': total_churned,
+        'total_loss': total_loss,
+        'retained_clients': retained_clients,
+        'revenue_saved': revenue_saved,
+        'cltv': cltv
+    }
+
+def create_priority_matrix(city_stats: pd.DataFrame, volume_threshold: int = 30, rate_threshold: float = 30.0):
+    """Crée la matrice de priorisation 2x2"""
+    
+    # Catégoriser chaque ville
+    city_stats['Category'] = city_stats.apply(
+        lambda row: '🔴 Urgence' if (row['Churned'] >= volume_threshold and row['Churn_Rate'] >= rate_threshold)
+        else '🟠 Ciblé' if (row['Churned'] < volume_threshold and row['Churn_Rate'] >= rate_threshold)
+        else '🟢 Watch' if (row['Churned'] >= volume_threshold and row['Churn_Rate'] < rate_threshold)
+        else '⚪ Ignore',
+        axis=1
+    )
+    
+    # Grouper par catégorie
+    matrix_data = {
+        '🔴 Urgence': city_stats[city_stats['Category'] == '🔴 Urgence'].nlargest(3, 'Churned'),
+        '🟠 Ciblé': city_stats[city_stats['Category'] == '🟠 Ciblé'].nlargest(3, 'Churn_Rate'),
+        '🟢 Watch': city_stats[city_stats['Category'] == '🟢 Watch'].nlargest(3, 'Churned'),
+        '⚪ Ignore': city_stats[city_stats['Category'] == '⚪ Ignore'].head(3)
+    }
+    
+    return matrix_data
+
+def render_priority_matrix_visual(matrix_data: dict):
+    """Affiche la matrice de priorisation visuellement"""
+    
+    st.markdown("#### 🎯 Matrice de Priorisation")
+    
+    # Ligne 1: Urgence + Ciblé
+    row1 = st.columns(2)
+    
+    with row1[0]:
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, rgba(231, 76, 60, 0.2), rgba(192, 57, 43, 0.3)); 
+                    border: 3px solid #e74c3c; padding: 20px; border-radius: 10px; min-height: 200px;">
+            <h3 style="color: #e74c3c; margin-bottom: 15px;">🔴 URGENCE ABSOLUE</h3>
+            <p style="color: #bdc3c7; font-size: 13px; margin-bottom: 10px;">
+                Volume élevé + Taux élevé → <strong>Action immédiate</strong>
+            </p>
+        """, unsafe_allow_html=True)
+        
+        urgence_cities = matrix_data.get('🔴 Urgence', pd.DataFrame())
+        if len(urgence_cities) > 0:
+            for _, city in urgence_cities.iterrows():
+                st.markdown(f"""
+                <div style="background: rgba(0,0,0,0.3); padding: 8px; margin: 5px 0; border-radius: 5px;">
+                    <strong style="color: white;">{city['City']}</strong><br>
+                    <span style="color: #e74c3c;">{city['Churned']} churned</span> • 
+                    <span style="color: #f39c12;">{city['Churn_Rate']:.1f}%</span>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.markdown("<p style='color: #95a5a6;'>✓ Aucune ville en urgence</p>", unsafe_allow_html=True)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    with row1[1]:
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, rgba(243, 156, 18, 0.2), rgba(211, 84, 0, 0.3)); 
+                    border: 3px solid #f39c12; padding: 20px; border-radius: 10px; min-height: 200px;">
+            <h3 style="color: #f39c12; margin-bottom: 15px;">🟠 INTERVENTION CIBLÉE</h3>
+            <p style="color: #bdc3c7; font-size: 13px; margin-bottom: 10px;">
+                Volume faible + Taux élevé → <strong>Audit RCA</strong>
+            </p>
+        """, unsafe_allow_html=True)
+        
+        cible_cities = matrix_data.get('🟠 Ciblé', pd.DataFrame())
+        if len(cible_cities) > 0:
+            for _, city in cible_cities.iterrows():
+                st.markdown(f"""
+                <div style="background: rgba(0,0,0,0.3); padding: 8px; margin: 5px 0; border-radius: 5px;">
+                    <strong style="color: white;">{city['City']}</strong><br>
+                    <span style="color: #e74c3c;">{city['Churned']} churned</span> • 
+                    <span style="color: #f39c12;">{city['Churn_Rate']:.1f}%</span>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.markdown("<p style='color: #95a5a6;'>Aucune ville ciblée</p>", unsafe_allow_html=True)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Ligne 2: Watch + Ignore
+    row2 = st.columns(2)
+    
+    with row2[0]:
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, rgba(46, 204, 113, 0.15), rgba(39, 174, 96, 0.2)); 
+                    border: 2px solid #27ae60; padding: 20px; border-radius: 10px; min-height: 150px;">
+            <h3 style="color: #27ae60; margin-bottom: 15px;">🟢 SURVEILLANCE</h3>
+            <p style="color: #bdc3c7; font-size: 13px; margin-bottom: 10px;">
+                Volume élevé + Taux acceptable → <strong>Watch list</strong>
+            </p>
+        """, unsafe_allow_html=True)
+        
+        watch_cities = matrix_data.get('🟢 Watch', pd.DataFrame())
+        if len(watch_cities) > 0:
+            cities_list = ", ".join(watch_cities['City'].tolist())
+            st.markdown(f"<p style='color: #ecf0f1; font-size: 14px;'>{cities_list}</p>", unsafe_allow_html=True)
+        else:
+            st.markdown("<p style='color: #95a5a6;'>Aucune</p>", unsafe_allow_html=True)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    with row2[1]:
+        st.markdown("""
+        <div style="background: linear-gradient(135deg, rgba(149, 165, 166, 0.1), rgba(127, 140, 141, 0.15)); 
+                    border: 2px solid #7f8c8d; padding: 20px; border-radius: 10px; min-height: 150px;">
+            <h3 style="color: #95a5a6; margin-bottom: 15px;">⚪ NON SIGNIFICATIF</h3>
+            <p style="color: #bdc3c7; font-size: 13px; margin-bottom: 10px;">
+                Volume faible + Taux acceptable → <strong>Bruit statistique</strong>
+            </p>
+        """, unsafe_allow_html=True)
+        
+        ignore_count = len(matrix_data.get('⚪ Ignore', pd.DataFrame()))
+        st.markdown(f"<p style='color: #95a5a6; font-size: 14px;'>{ignore_count} petites villes</p>", unsafe_allow_html=True)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+
 def render_mode2_visuals(df: pd.DataFrame, top_n: int, sort_by: str):
-    """Mode 2: Visualisations du Top N villes"""
+    """Mode 2: Visualisations du Top N villes avec matrice de priorisation"""
     try:
         # Préparer les données
         city_stats = df.groupby('City').agg({
@@ -1614,9 +1748,60 @@ def render_mode2_visuals(df: pd.DataFrame, top_n: int, sort_by: str):
             axis=1
         )
         
-        # Trier et prendre Top N
+        # === NOUVEAU: Filtrer les villes statistiquement significatives ===
+        min_clients_threshold = 50  # Seuil de significativité
+        city_stats_significant = city_stats[city_stats['Total'] >= min_clients_threshold].copy()
+        
+        excluded_count = len(city_stats) - len(city_stats_significant)
+        
+        if excluded_count > 0:
+            st.info(f"ℹ️ **Filtre de significativité:** {excluded_count} villes exclues (< {min_clients_threshold} clients)")
+        
+        # === NOUVEAU 1: IMPACT FINANCIER ===
+        st.markdown("### 💰 Impact Financier")
+        
+        financial = calculate_financial_impact(city_stats_significant)
+        
+        fin_cols = st.columns(4)
+        with fin_cols[0]:
+            UIComponents.render_kpi_card(
+                f"${financial['total_loss']:,.0f}",
+                "Pertes annuelles totales",
+                "red"
+            )
+        with fin_cols[1]:
+            UIComponents.render_kpi_card(
+                f"{financial['total_churned']:,}",
+                "Clients churned",
+                "dark"
+            )
+        with fin_cols[2]:
+            UIComponents.render_kpi_card(
+                f"${financial['revenue_saved']:,.0f}",
+                "Récupération potentielle (30%)",
+                "yellow"
+            )
+        with fin_cols[3]:
+            roi_multiplier = (financial['revenue_saved'] / 10000) if financial['revenue_saved'] > 0 else 0
+            UIComponents.render_kpi_card(
+                f"{roi_multiplier:.0f}x",
+                "ROI campagne (budget $10K)",
+                "blue"
+            )
+        
+        st.markdown("---")
+        
+        # === NOUVEAU 2: MATRICE DE PRIORISATION ===
+        matrix_data = create_priority_matrix(city_stats_significant, volume_threshold=30, rate_threshold=30.0)
+        render_priority_matrix_visual(matrix_data)
+        
+        st.markdown("---")
+        
+        # === EXISTANT: Trier et prendre Top N (maintenant sur données significatives) ===
+        
+        # Trier et prendre Top N (sur données significatives)
         sort_col = 'Churned' if sort_by == 'Volume churned' else 'Churn_Rate'
-        top_cities = city_stats.nlargest(top_n, sort_col)
+        top_cities = city_stats_significant.nlargest(top_n, sort_col)
         
         # === VIZ 1: Podium Top 3 ===
         if len(top_cities) >= 3:
@@ -1699,7 +1884,7 @@ def render_mode2_visuals(df: pd.DataFrame, top_n: int, sort_by: str):
         
         # === VIZ 3: Insights ===
         total_churned = top_cities['Churned'].sum()
-        total_all = city_stats['Churned'].sum()
+        total_all = city_stats_significant['Churned'].sum()
         concentration = (total_churned / total_all * 100) if total_all > 0 else 0
         
         st.markdown(f"""
@@ -1711,8 +1896,193 @@ def render_mode2_visuals(df: pd.DataFrame, top_n: int, sort_by: str):
         </div>
         """, unsafe_allow_html=True)
         
+        # === NOUVEAU 3: BOUTON GÉNÉRATION RAPPORT ===
+        st.markdown("---")
+        st.markdown("### 📄 Actions et Recommandations")
+        
+        col_btn = st.columns([1, 2, 1])
+        with col_btn[1]:
+            if st.button("📊 Générer Rapport d'Action Stratégique", type="primary", use_container_width=True):
+                with st.spinner("Génération du rapport en cours..."):
+                    # Générer le rapport PDF
+                    pdf_path = generate_action_report(top_cities, financial, matrix_data)
+                    
+                    if pdf_path:
+                        with open(pdf_path, "rb") as file:
+                            st.download_button(
+                                label="⬇️ Télécharger le Rapport PDF",
+                                data=file,
+                                file_name="Churn_Action_Report.pdf",
+                                mime="application/pdf",
+                                use_container_width=True
+                            )
+                        st.success("✅ Rapport généré avec succès !")
+        
     except Exception as e:
         st.error(f"Erreur Mode 2: {str(e)}")
+
+def generate_action_report(top_cities: pd.DataFrame, financial: dict, matrix_data: dict) -> str:
+    """Génère un rapport PDF d'action stratégique"""
+    try:
+        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+        from reportlab.lib import colors
+        import tempfile
+        import os
+        
+        # Créer fichier temporaire
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+        pdf_path = temp_file.name
+        temp_file.close()
+        
+        # Créer document
+        doc = SimpleDocTemplate(pdf_path, pagesize=A4,
+                                leftMargin=0.75*inch, rightMargin=0.75*inch,
+                                topMargin=1*inch, bottomMargin=1*inch)
+        
+        # Styles
+        styles = getSampleStyleSheet()
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            textColor=colors.HexColor('#e74c3c'),
+            spaceAfter=30,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold'
+        )
+        
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=16,
+            textColor=colors.HexColor('#34495e'),
+            spaceAfter=12,
+            spaceBefore=12,
+            fontName='Helvetica-Bold'
+        )
+        
+        body_style = ParagraphStyle(
+            'CustomBody',
+            parent=styles['BodyText'],
+            fontSize=11,
+            alignment=TA_JUSTIFY,
+            spaceAfter=12
+        )
+        
+        # Contenu
+        story = []
+        
+        # Page 1: Executive Summary
+        story.append(Paragraph("PLAN D'ACTION ANTI-CHURN", title_style))
+        story.append(Paragraph("Rapport Stratégique - Top Villes Critiques", styles['Heading3']))
+        story.append(Spacer(1, 0.3*inch))
+        
+        story.append(Paragraph("1. SITUATION ACTUELLE", heading_style))
+        
+        summary_data = [
+            ['Métrique', 'Valeur', 'Impact'],
+            ['Clients churned', f"{financial['total_churned']:,}", 'Volume total de pertes'],
+            ['Pertes annuelles', f"${financial['total_loss']:,.0f}", 'Revenus non récupérés'],
+            ['Potentiel récupération', f"${financial['revenue_saved']:,.0f}", 'Si rétention 30%'],
+            ['ROI estimé', f"{(financial['revenue_saved']/10000):.0f}x", 'Budget campagne $10K']
+        ]
+        
+        table = Table(summary_data, colWidths=[2*inch, 1.5*inch, 2.5*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        story.append(table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        # Recommandation stratégique
+        story.append(Paragraph("2. RECOMMANDATION STRATÉGIQUE", heading_style))
+        
+        urgence_cities = matrix_data.get('🔴 Urgence', pd.DataFrame())
+        if len(urgence_cities) > 0:
+            urgence_text = ", ".join(urgence_cities['City'].tolist())
+            story.append(Paragraph(
+                f"<b>PRIORITÉ 1 - Urgence absolue:</b> {urgence_text}<br/>"
+                f"<i>Action:</i> Campagne de rétention massive (email + call proactif)<br/>"
+                f"<i>Budget:</i> $5,000 | <i>Timeline:</i> 2 semaines",
+                body_style
+            ))
+        
+        cible_cities = matrix_data.get('🟠 Ciblé', pd.DataFrame())
+        if len(cible_cities) > 0:
+            cible_text = ", ".join(cible_cities['City'].tolist())
+            story.append(Paragraph(
+                f"<b>PRIORITÉ 2 - Intervention ciblée:</b> {cible_text}<br/>"
+                f"<i>Action:</i> Audit Root Cause Analysis (focus groups, interviews)<br/>"
+                f"<i>Budget:</i> $3,000 | <i>Timeline:</i> 3 semaines",
+                body_style
+            ))
+        
+        story.append(PageBreak())
+        
+        # Page 2: Plan d'action détaillé
+        story.append(Paragraph("3. PLAN D'ACTION - 12 SEMAINES", heading_style))
+        
+        timeline_data = [
+            ['Phase', 'Semaines', 'Actions', 'Budget'],
+            ['Phase 1', '1-2', 'Email rétention personnalisés (J+30)', '$2,000'],
+            ['Phase 2', '3-6', 'Appels proactifs (J+90)', '$5,000'],
+            ['Phase 3', '7-9', 'Offres upgrade ciblées', '$3,000'],
+            ['Phase 4', '10-12', 'Mesure résultats & ajustements', '$0'],
+            ['', '', 'TOTAL', '$10,000']
+        ]
+        
+        timeline_table = Table(timeline_data, colWidths=[1.2*inch, 1.2*inch, 2.8*inch, 1*inch])
+        timeline_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#f39c12')),
+            ('TEXTCOLOR', (0, -1), (-1, -1), colors.whitesmoke),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE')
+        ]))
+        story.append(timeline_table)
+        story.append(Spacer(1, 0.3*inch))
+        
+        # KPIs de suivi
+        story.append(Paragraph("4. KPIS DE SUIVI", heading_style))
+        
+        kpi_text = """
+        <b>• Taux de rétention:</b> Objectif 30% (baseline 0%)<br/>
+        <b>• Taux d'engagement:</b> >40% ouverture emails, >15% réponse calls<br/>
+        <b>• Revenue sauvé:</b> Objectif $94,500 en 3 mois<br/>
+        <b>• NPS post-campagne:</b> Augmentation de +10 points<br/>
+        <b>• Churn rate:</b> Réduction de 5 points de %
+        """
+        story.append(Paragraph(kpi_text, body_style))
+        
+        # Footer
+        story.append(Spacer(1, 0.5*inch))
+        story.append(Paragraph(
+            "---<br/><i>Rapport généré automatiquement par EthicalDataBoost Dashboard</i>",
+            ParagraphStyle('Footer', parent=styles['Normal'], fontSize=9, textColor=colors.gray, alignment=TA_CENTER)
+        ))
+        
+        # Générer PDF
+        doc.build(story)
+        
+        return pdf_path
+        
+    except Exception as e:
+        st.error(f"Erreur génération PDF: {str(e)}")
+        return None
 
 def render_mode3_visuals(df: pd.DataFrame, min_churned: int, groupby: str):
     """Mode 3: Visualisations vue complète"""
