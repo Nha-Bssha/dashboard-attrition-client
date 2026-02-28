@@ -1,5 +1,5 @@
 """
-🎯 DASHBOARD TELCO CHURN
+🎯 DASHBOARD TELCO CHURN - VERSION PREMIUM 2.0
 Score Cible: 10/10
 
 Architecture:
@@ -912,28 +912,28 @@ def create_california_map(df: pd.DataFrame) -> Optional[go.Figure]:
         if len(city_geo_clean) == 0:
             return None
         
-        # Filtrer pour afficher SEULEMENT les zones à haut taux de churn (>25%)
-        city_geo_high_churn = city_geo_clean[city_geo_clean['Churn_Rate'] >= 25].copy()
+        # TOP 3 des villes avec le PLUS GRAND NOMBRE de clients churned
+        city_geo_top3 = city_geo_clean.nlargest(3, 'Churned')
         
-        # Si aucune ville ne dépasse 25%, prendre le top 50% des taux les plus élevés
-        if len(city_geo_high_churn) == 0:
-            median_churn = city_geo_clean['Churn_Rate'].median()
-            city_geo_high_churn = city_geo_clean[city_geo_clean['Churn_Rate'] >= median_churn].copy()
-        
-        if len(city_geo_high_churn) == 0:
+        if len(city_geo_top3) == 0:
             return None
         
         fig = px.scatter_mapbox(
-            city_geo_high_churn,
+            city_geo_top3,
             lat='Latitude',
             lon='Longitude',
-            size='Churn_Rate',  # TAILLE = Taux de churn (pas nombre de clients)
-            color='Churn_Rate',
+            size='Churned',  # TAILLE = Nombre de churned
+            color='Churn_Rate',  # COULEUR = Taux de churn
             hover_name='City',
-            hover_data={'Total': True, 'Churn_Rate': ':.1f%', 
-                       'Latitude': False, 'Longitude': False},
+            hover_data={
+                'Total': True, 
+                'Churned': True,
+                'Churn_Rate': ':.1f%', 
+                'Latitude': False, 
+                'Longitude': False
+            },
             color_continuous_scale=['#F39C12', '#E74C3C', '#C0392B'],  # Orange → Rouge foncé
-            size_max=40,
+            size_max=60,  # Bulles plus grosses pour visibilité
             zoom=5.5,
             mapbox_style='carto-darkmatter'
         )
