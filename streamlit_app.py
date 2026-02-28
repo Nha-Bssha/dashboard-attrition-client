@@ -330,6 +330,12 @@ with tab1:
             # Emphasis sur seniors (67-74 et 74-81)
             age_churned['Is_Senior'] = age_churned['Tranche_Age'].isin(['67-74', '74-81'])
             
+            # Calculer tailles de bulles (minimum 20, maximum basé sur les données)
+            max_count = age_churned['Count'].max()
+            age_churned['BubbleSize'] = age_churned['Count'].apply(
+                lambda x: max(30, (x / max_count) * 100)  # Taille min 30, max 100
+            )
+            
             fig = go.Figure()
             
             # VRAIES BULLES VISIBLES avec axes
@@ -338,7 +344,7 @@ with tab1:
                 y=age_churned['Count'],
                 mode='markers+text',
                 marker=dict(
-                    size=age_churned['Count'] * 1.8,  # Taille amplifiée pour visibilité
+                    size=age_churned['BubbleSize'],  # Tailles garanties visibles
                     color=['#ff6b6b' if s else '#4ecdc4' for s in age_churned['Is_Senior']],
                     line=dict(width=3, color='white'),
                     opacity=0.85
@@ -1520,15 +1526,21 @@ with tab4:
         with row_lorenz[0]:
             st.markdown("#### Courbe de Lorenz")
             
-            # Calculer courbe de Lorenz
+            # Calculer courbe de Lorenz CORRECTE
             ca_sorted = df_filtered.sort_values('Total Revenue')['Total Revenue'].values
             if len(ca_sorted) > 0:
+                # Cumulatif du CA (en %)
                 cumsum_ca = np.cumsum(ca_sorted)
-                cumsum_ca = cumsum_ca / cumsum_ca[-1] * 100  # En %
-                cumsum_clients = np.arange(1, len(ca_sorted) + 1) / len(ca_sorted) * 100
+                cumsum_ca_pct = (cumsum_ca / cumsum_ca[-1]) * 100
                 
-                # Coefficient de Gini
-                gini = 1 - 2 * np.trapz(cumsum_ca / 100, cumsum_clients / 100)
+                # Ajouter le point de départ (0,0)
+                cumsum_ca_pct = np.insert(cumsum_ca_pct, 0, 0)
+                
+                # Cumulatif des clients (en %)
+                cumsum_clients_pct = (np.arange(len(ca_sorted) + 1) / len(ca_sorted)) * 100
+                
+                # Coefficient de Gini (aire entre courbe et diagonale)
+                gini = 1 - 2 * np.trapz(cumsum_ca_pct / 100, cumsum_clients_pct / 100)
                 
                 fig = go.Figure()
                 
@@ -1542,25 +1554,25 @@ with tab4:
                     hoverinfo='skip'
                 ))
                 
-                # Courbe de Lorenz réelle
+                # Courbe de Lorenz réelle (démarre à 0,0)
                 fig.add_trace(go.Scatter(
-                    x=cumsum_clients,
-                    y=cumsum_ca,
+                    x=cumsum_clients_pct,
+                    y=cumsum_ca_pct,
                     mode='lines',
                     name='Distribution réelle',
                     line=dict(color='#ff6b6b', width=4),
                     fill='tonexty',
                     fillcolor='rgba(255, 107, 107, 0.2)',
-                    hovertemplate='<b>%{x:.0f}%</b> clients<br>%{y:.0f}% du CA<extra></extra>'
+                    hovertemplate='<b>%{x:.1f}%</b> clients<br><b>%{y:.1f}%</b> du CA<extra></extra>'
                 ))
                 
                 # Annotation Gini
                 fig.add_annotation(
-                    x=50, y=30,
-                    text=f"<b>Coefficient de Gini</b><br>{gini:.3f}",
+                    x=50, y=25,
+                    text=f"<b>Gini = {gini:.3f}</b><br>{'🔴 Forte inégalité' if gini > 0.5 else '🟡 Inégalité modérée' if gini > 0.3 else '🟢 Faible inégalité'}",
                     showarrow=False,
-                    font=dict(size=18, color='white', family='Arial Black'),
-                    bgcolor='rgba(102, 126, 234, 0.8)',
+                    font=dict(size=16, color='white', family='Arial Black'),
+                    bgcolor='rgba(0, 0, 0, 0.8)',
                     bordercolor='white',
                     borderwidth=2,
                     borderpad=10
@@ -1570,14 +1582,16 @@ with tab4:
                     height=400,
                     plot_bgcolor='rgba(52, 73, 94, 0.8)',
                     paper_bgcolor='rgba(0,0,0,0)',
-                    xaxis={'title': '% Clients cumulés (du plus pauvre au plus riche)', 
-                           'showgrid': True, 'gridcolor': 'rgba(255,255,255,0.1)', 'color': 'white'},
+                    xaxis={'title': '% Clients cumulés (classés du plus pauvre au plus riche)', 
+                           'showgrid': True, 'gridcolor': 'rgba(255,255,255,0.1)', 'color': 'white',
+                           'range': [0, 100]},
                     yaxis={'title': '% CA cumulé', 'showgrid': True, 
-                           'gridcolor': 'rgba(255,255,255,0.1)', 'color': 'white'},
+                           'gridcolor': 'rgba(255,255,255,0.1)', 'color': 'white',
+                           'range': [0, 100]},
                     font=dict(color='white'),
                     showlegend=True,
-                    legend=dict(x=0.02, y=0.98, bgcolor='rgba(0,0,0,0.5)', font=dict(color='white')),
-                    margin=dict(l=60, r=20, t=30, b=60)
+                    legend=dict(x=0.02, y=0.98, bgcolor='rgba(0,0,0,0.7)', font=dict(color='white')),
+                    margin=dict(l=60, r=20, t=30, b=70)
                 )
                 st.plotly_chart(fig, use_container_width=True)
         
