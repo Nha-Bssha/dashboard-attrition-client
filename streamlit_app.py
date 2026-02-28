@@ -29,7 +29,7 @@ warnings.filterwarnings('ignore')
 # ============================================================================
 
 st.set_page_config(
-    page_title="Dashboard Telco Premium - 17/02/2024",
+    page_title="Dashboard Telco - Analyse attrition période 2024",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed"
