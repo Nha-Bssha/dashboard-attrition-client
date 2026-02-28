@@ -319,35 +319,49 @@ with tab1:
     row1_cols = st.columns([2, 1, 1, 2])
     
     with row1_cols[0]:
-        # BUBBLE CHART - Répartition par tranche d'âge
-        st.markdown("#### Répartition par tranche d'âge")
+        # BUBBLE CHART - Répartition des churns par tranche d'âge
+        st.markdown("#### Répartition des churns par tranche d'âge")
         
-        age_stats = df_filtered.groupby('Tranche_Age').agg({
-            'Customer ID': 'count'
-        }).reset_index()
-        age_stats.columns = ['Tranche_Age', 'Count']
+        # FOCUS SUR CHURNED UNIQUEMENT
+        age_churned = df_filtered[df_filtered['Customer Status'] == 'Churned'].groupby('Tranche_Age').size().reset_index(name='Count')
+        age_churned = age_churned.dropna()
         
-        # Créer bubble chart
-        fig = px.scatter(
-            age_stats,
-            x=[1, 2, 3, 1, 2, 3, 1, 2, 3][:len(age_stats)],
-            y=[1, 1, 1, 2, 2, 2, 3, 3, 3][:len(age_stats)],
-            size='Count',
-            color='Tranche_Age',
-            hover_data={'Tranche_Age': True, 'Count': True},
-            size_max=100,
-            color_discrete_sequence=px.colors.qualitative.Bold
-        )
-        fig.update_layout(
-            showlegend=False,
-            xaxis={'visible': False},
-            yaxis={'visible': False},
-            height=300,
-            margin=dict(l=0, r=0, t=0, b=0),
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)'
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        if len(age_churned) > 0:
+            # Emphasis sur seniors (67-74 et 74-81)
+            age_churned['Is_Senior'] = age_churned['Tranche_Age'].isin(['67-74', '74-81'])
+            colors = ['#e74c3c' if x else '#3498db' for x in age_churned['Is_Senior']]
+            
+            fig = go.Figure()
+            
+            fig.add_trace(go.Scatter(
+                x=[i for i in range(len(age_churned))],
+                y=[1] * len(age_churned),
+                mode='markers+text',
+                marker=dict(
+                    size=age_churned['Count'],
+                    sizemode='diameter',
+                    sizeref=2.*max(age_churned['Count'])/(100.**2),
+                    color=colors,
+                    line=dict(width=3, color='white')
+                ),
+                text=age_churned['Tranche_Age'].astype(str) + '<br>' + age_churned['Count'].astype(str),
+                textposition='middle center',
+                textfont=dict(size=14, color='white', family='Arial Black'),
+                hovertemplate='<b>%{text}</b><br>Clients churned<extra></extra>'
+            ))
+            
+            fig.update_layout(
+                height=300,
+                showlegend=False,
+                xaxis={'visible': False},
+                yaxis={'visible': False},
+                plot_bgcolor='rgba(52, 73, 94, 0.8)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                margin=dict(l=0, r=0, t=10, b=0)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Aucun client churned avec les filtres actuels")
     
     with row1_cols[1]:
         # DONUT - Churned/Joined/Stayed
@@ -1147,58 +1161,70 @@ with tab3:
             scatter_sample,
             x='Age',
             y='Satisfaction Score',
-            color='Customer Status',
-            color_discrete_map=colors_sat,
-            opacity=0.6,
-            size_max=10
+            opacity=0.4,
+            color_discrete_sequence=['#3498db']  # UNE SEULE COULEUR
         )
+        fig.update_traces(marker=dict(size=8))
         fig.update_layout(
             height=350,
             plot_bgcolor='rgba(52, 73, 94, 0.8)',
             paper_bgcolor='rgba(0,0,0,0)',
             xaxis={'title': 'Age', 'showgrid': True, 'gridcolor': 'rgba(255,255,255,0.1)'},
-            yaxis={'title': 'Score de satisfaction', 'showgrid': True, 'gridcolor': 'rgba(255,255,255,0.1)'}
+            yaxis={'title': 'Score de satisfaction', 'showgrid': True, 'gridcolor': 'rgba(255,255,255,0.1)'},
+            showlegend=False  # PAS DE LÉGENDE
         )
         st.plotly_chart(fig, use_container_width=True)
     
     with row3_cols[1]:
-        st.markdown("#### NPS vs taux de churn")
+        st.markdown("#### NPS vs taux de churn - Top 5 villes critiques")
         
-        # Calculer NPS et churn par ville (top 5)
-        city_nps = df_filtered.groupby('City').agg({
-            'Satisfaction Score': lambda x: ((x >= 4).sum() - (x <= 2).sum()) / len(x) * 100,
+        # TOP 5 villes PAR TAUX DE CHURN (pas par volume)
+        city_stats = df_filtered.groupby('City').agg({
             'Customer ID': 'count',
-            'Customer Status': lambda x: (x == 'Churned').sum()
+            'Customer Status': lambda x: (x == 'Churned').sum(),
+            'Satisfaction Score': lambda x: ((x >= 4).sum() - (x <= 2).sum()) / len(x) * 100 if len(x) > 0 else 0
         }).reset_index()
-        city_nps.columns = ['City', 'NPS', 'Total', 'Churned']
-        city_nps['Churn_Rate'] = (city_nps['Churned'] / city_nps['Total'] * 100).round(1)
-        city_nps = city_nps.nlargest(5, 'Total')
+        city_stats.columns = ['City', 'Total', 'Churned', 'NPS']
+        city_stats['Churn_Rate'] = (city_stats['Churned'] / city_stats['Total'] * 100).round(1)
+        
+        # Filtrer villes avec minimum 50 clients
+        city_stats = city_stats[city_stats['Total'] >= 50]
+        
+        # ✅ TOP 5 PAR CHURN RATE
+        top5_churn = city_stats.nlargest(5, 'Churn_Rate')
         
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         
         fig.add_trace(go.Bar(
-            x=city_nps['City'],
-            y=city_nps['NPS'],
+            x=top5_churn['City'],
+            y=top5_churn['NPS'],
             name='NPS',
             marker=dict(color='#3498db'),
-            text=city_nps['NPS'].apply(lambda x: f"{x:.1f}"),
-            textposition='outside'
+            text=top5_churn['NPS'].round(1),
+            textposition='outside',
+            textfont=dict(color='white', size=12)
         ), secondary_y=False)
         
         fig.add_trace(go.Scatter(
-            x=city_nps['City'],
-            y=city_nps['Churn_Rate'],
-            name='Taux de churn',
+            x=top5_churn['City'],
+            y=top5_churn['Churn_Rate'],
+            name='Taux de churn (%)',
             mode='lines+markers',
-            line=dict(color='#e74c3c', width=3),
-            marker=dict(size=10)
+            line=dict(color='#e74c3c', width=4),
+            marker=dict(size=14, symbol='diamond', line=dict(color='white', width=2))
         ), secondary_y=True)
+        
+        fig.update_yaxes(title_text="NPS", secondary_y=False, showgrid=True, gridcolor='rgba(255,255,255,0.1)')
+        fig.update_yaxes(title_text="Taux de churn (%)", secondary_y=True, showgrid=False)
         
         fig.update_layout(
             height=350,
             plot_bgcolor='rgba(52, 73, 94, 0.8)',
             paper_bgcolor='rgba(0,0,0,0)',
-            showlegend=True
+            xaxis={'title': '', 'tickangle': -30},
+            showlegend=True,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            margin=dict(l=50, r=50, t=60, b=70)
         )
         st.plotly_chart(fig, use_container_width=True)
     
@@ -1372,54 +1398,657 @@ with tab3:
 with tab4:
     st.markdown('<h2 class="sub-title">Coût du Churn</h2>', unsafe_allow_html=True)
     
-    # KPI Total CA
-    total_ca = df_filtered['Total Revenue'].sum() / 1_000_000
-    
-    col_kpi = st.columns([1, 3])
-    
-    with col_kpi[0]:
-        st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #1a1a1a 0%, #000000 100%);
-                    padding: 40px; border-radius: 15px; text-align: center;">
-            <div style="font-size: 72px; font-weight: 700; color: white;">{total_ca:.1f}M€</div>
-            <div style="font-size: 18px; color: rgba(255,255,255,0.9); margin-top: 10px;">Total CA</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col_kpi[1]:
-        st.markdown("### Répartition du CA par statut")
+    # Vérifier données
+    if len(df_filtered) == 0:
+        st.warning("⚠️ Aucune donnée disponible")
+    else:
+        # KPI Total CA
+        total_ca = df_filtered['Total Revenue'].sum() / 1_000_000
         
-        ca_by_status = df_filtered.groupby('Customer Status').agg({
-            'Total Revenue': 'sum'
-        }).reset_index()
-        ca_by_status['Percentage'] = (ca_by_status['Total Revenue'] / ca_by_status['Total Revenue'].sum() * 100).round(1)
-        
-        # Ribbon chart
-        fig = go.Figure(go.Funnel(
-            y=ca_by_status['Customer Status'],
-            x=ca_by_status['Percentage'],
-            textposition="inside",
-            textinfo="value+percent initial",
-            marker={"color": ["#3498db", "#e74c3c", "#27AE60"][:len(ca_by_status)]},
-            connector={"line": {"color": "white", "width": 2}}
-        ))
-        fig.update_layout(height=250, margin=dict(l=0, r=0, t=0, b=0))
-        st.plotly_chart(fig, use_container_width=True)
-
-with tab5:
-    st.markdown('<h2 class="sub-title">Focus sur San Diego</h2>', unsafe_allow_html=True)
-    
-    df_san_diego = df_filtered[df_filtered['City'] == 'San Diego'].copy()
-    df_seniors = df_san_diego[df_san_diego['Age'] >= 67].copy()
-    
-    if len(df_seniors) > 0:
-        row1_cols = st.columns(3)
+        # ROW 1 - KPI + Diagramme Gini + Répartition CA
+        row1_cols = st.columns([1, 1, 2])
         
         with row1_cols[0]:
-            st.markdown("#### Type de contrat (67+)")
-            contract_seniors = df_seniors.groupby(['Tranche_Age', 'Contract']).size().reset_index(name='Count')
-            fig = px.bar(contract_seniors, x='Tranche_Age', y='Count', color='Contract', barmode='group')
-            fig.update_layout(height=300, plot_bgcolor='rgba(52, 73, 94, 0.8)')
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #1a1a1a 0%, #000000 100%);
+                        padding: 50px 20px; border-radius: 15px; text-align: center;
+                        box-shadow: 0 8px 16px rgba(0,0,0,0.4);">
+                <div style="font-size: 80px; font-weight: 700; color: #f39c12;">{total_ca:.1f}M€</div>
+                <div style="font-size: 20px; color: rgba(255,255,255,0.9); margin-top: 15px; font-weight: 600;">CHIFFRE D'AFFAIRES TOTAL</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with row1_cols[1]:
+            # Diagramme de Gini - Concentration du CA
+            st.markdown("#### 📊 Concentration CA (Gini)")
+            
+            # Calculer indices de Gini pour différentes dimensions
+            def gini_coefficient(values):
+                sorted_values = sorted(values)
+                n = len(sorted_values)
+                cumsum = 0
+                for i, val in enumerate(sorted_values):
+                    cumsum += (2 * (i + 1) - n - 1) * val
+                return cumsum / (n * sum(sorted_values)) if sum(sorted_values) > 0 else 0
+            
+            gini_data = {
+                'Ville': gini_coefficient(df_filtered.groupby('City')['Total Revenue'].sum().values),
+                'Âge': gini_coefficient(df_filtered.groupby('Tranche_Age')['Total Revenue'].sum().values),
+                'Genre': gini_coefficient(df_filtered.groupby('Gender')['Total Revenue'].sum().values),
+                'Offre': gini_coefficient(df_filtered.groupby('Offer')['Total Revenue'].sum().values),
+                'Contrat': gini_coefficient(df_filtered.groupby('Contract')['Total Revenue'].sum().values)
+            }
+            
+            gini_df = pd.DataFrame(list(gini_data.items()), columns=['Dimension', 'Gini'])
+            gini_df['Concentration'] = (gini_df['Gini'] * 100).round(1)
+            
+            fig = go.Figure(go.Bar(
+                y=gini_df['Dimension'],
+                x=gini_df['Concentration'],
+                orientation='h',
+                marker=dict(
+                    color=gini_df['Concentration'],
+                    colorscale='Reds',
+                    showscale=True
+                ),
+                text=gini_df['Concentration'].apply(lambda x: f"{x:.1f}%"),
+                textposition='inside',
+                textfont=dict(color='white', size=14, family='Arial Black')
+            ))
+            fig.update_layout(
+                height=300,
+                plot_bgcolor='rgba(52, 73, 94, 0.8)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis={'title': 'Indice de Gini (%)', 'showgrid': False},
+                yaxis={'title': ''},
+                showlegend=False,
+                margin=dict(l=100, r=20, t=20, b=50)
+            )
             st.plotly_chart(fig, use_container_width=True)
+        
+        with row1_cols[2]:
+            st.markdown("#### Répartition du CA par statut client")
+            
+            ca_by_status = df_filtered.groupby('Customer Status').agg({
+                'Total Revenue': 'sum'
+            }).reset_index()
+            ca_by_status['CA_M'] = (ca_by_status['Total Revenue'] / 1_000_000).round(2)
+            ca_by_status['Percentage'] = (ca_by_status['Total Revenue'] / ca_by_status['Total Revenue'].sum() * 100).round(1)
+            ca_by_status = ca_by_status.sort_values('CA_M', ascending=False)
+            
+            # Funnel chart amélioré
+            colors_status = {
+                'Stayed': '#27AE60',
+                'Churned': '#e74c3c', 
+                'Joined': '#3498db'
+            }
+            
+            fig = go.Figure()
+            
+            for idx, row in ca_by_status.iterrows():
+                fig.add_trace(go.Bar(
+                    y=['CA Total'],
+                    x=[row['Percentage']],
+                    name=row['Customer Status'],
+                    orientation='h',
+                    marker=dict(color=colors_status.get(row['Customer Status'], '#95a5a6')),
+                    text=f"{row['CA_M']:.1f}M€ ({row['Percentage']:.0f}%)",
+                    textposition='inside',
+                    textfont=dict(color='white', size=14, family='Arial')
+                ))
+            
+            fig.update_layout(
+                barmode='stack',
+                height=300,
+                plot_bgcolor='rgba(52, 73, 94, 0.8)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis={'showgrid': False, 'title': ''},
+                yaxis={'showgrid': False, 'title': ''},
+                showlegend=True,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                margin=dict(l=20, r=20, t=40, b=20)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # ROW 2 - CA par Contrat + CA par Offre
+        row2_cols = st.columns(2)
+        
+        with row2_cols[0]:
+            st.markdown("#### CA par type de contrat")
+            
+            ca_contract = df_filtered.groupby('Contract').agg({
+                'Total Revenue': 'sum'
+            }).reset_index()
+            ca_contract['CA_M'] = (ca_contract['Total Revenue'] / 1_000_000).round(2)
+            ca_contract['Pct'] = (ca_contract['Total Revenue'] / ca_contract['Total Revenue'].sum() * 100).round(1)
+            ca_contract = ca_contract.sort_values('CA_M', ascending=False)
+            
+            fig = go.Figure()
+            contract_colors = {'Month-to-Month': '#f39c12', 'One Year': '#3498db', 'Two Year': '#27AE60'}
+            
+            for idx, row in ca_contract.iterrows():
+                fig.add_trace(go.Bar(
+                    y=['CA'],
+                    x=[row['Pct']],
+                    name=row['Contract'],
+                    orientation='h',
+                    marker=dict(color=contract_colors.get(row['Contract'], '#95a5a6')),
+                    text=f"{row['CA_M']:.1f}M€<br>({row['Pct']:.1f}%)",
+                    textposition='inside',
+                    textfont=dict(color='white', size=12)
+                ))
+            
+            fig.update_layout(
+                barmode='stack',
+                height=300,
+                plot_bgcolor='rgba(52, 73, 94, 0.8)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis={'showgrid': False, 'title': '% du CA total'},
+                yaxis={'showgrid': False, 'visible': False},
+                showlegend=True,
+                legend=dict(orientation="h", y=1.1),
+                margin=dict(l=20, r=20, t=60, b=50)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with row2_cols[1]:
+            st.markdown("#### CA par offre")
+            
+            ca_offer = df_filtered.groupby('Offer').agg({
+                'Total Revenue': 'sum'
+            }).reset_index()
+            ca_offer['CA_M'] = (ca_offer['Total Revenue'] / 1_000_000).round(2)
+            ca_offer = ca_offer.sort_values('CA_M', ascending=False)
+            
+            fig = go.Figure(go.Bar(
+                y=ca_offer['Offer'],
+                x=ca_offer['CA_M'],
+                orientation='h',
+                marker=dict(
+                    color=ca_offer['CA_M'],
+                    colorscale='Blues',
+                    showscale=False
+                ),
+                text=ca_offer['CA_M'].apply(lambda x: f"{x:.2f}M€"),
+                textposition='outside',
+                textfont=dict(color='white', size=12)
+            ))
+            fig.update_layout(
+                height=300,
+                plot_bgcolor='rgba(52, 73, 94, 0.8)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis={'title': 'CA (M€)', 'showgrid': True, 'gridcolor': 'rgba(255,255,255,0.1)'},
+                yaxis={'title': ''},
+                showlegend=False,
+                margin=dict(l=100, r=50, t=20, b=50)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # ROW 3 - CA par tranche d'âge + CA par CLV (Combos avec churn)
+        row3_cols = st.columns(2)
+        
+        with row3_cols[0]:
+            st.markdown("#### CA total par tranche d'âge + Taux de churn")
+            
+            ca_age = df_filtered.groupby('Tranche_Age').agg({
+                'Total Revenue': 'sum',
+                'Customer ID': 'count',
+                'Customer Status': lambda x: (x == 'Churned').sum()
+            }).reset_index()
+            ca_age.columns = ['Tranche_Age', 'CA', 'Total', 'Churned']
+            ca_age['CA_M'] = (ca_age['CA'] / 1_000_000).round(2)
+            ca_age['Churn_Rate'] = (ca_age['Churned'] / ca_age['Total'] * 100).round(1)
+            ca_age = ca_age.dropna().sort_values('Tranche_Age')
+            
+            fig = make_subplots(specs=[[{"secondary_y": True}]])
+            
+            fig.add_trace(go.Scatter(
+                x=ca_age['Tranche_Age'].astype(str),
+                y=ca_age['CA_M'],
+                name='CA Total (M€)',
+                mode='lines+markers',
+                line=dict(color='#3498db', width=4),
+                marker=dict(size=10),
+                fill='tozeroy',
+                fillcolor='rgba(52, 152, 219, 0.3)'
+            ), secondary_y=False)
+            
+            fig.add_trace(go.Scatter(
+                x=ca_age['Tranche_Age'].astype(str),
+                y=ca_age['Churn_Rate'],
+                name='Taux de churn (%)',
+                mode='lines+markers',
+                line=dict(color='#e74c3c', width=4, dash='dot'),
+                marker=dict(size=10, symbol='diamond')
+            ), secondary_y=True)
+            
+            fig.update_yaxes(title_text="CA (M€)", secondary_y=False, showgrid=True, gridcolor='rgba(255,255,255,0.1)')
+            fig.update_yaxes(title_text="Taux de churn (%)", secondary_y=True, showgrid=False)
+            
+            fig.update_layout(
+                height=350,
+                plot_bgcolor='rgba(52, 73, 94, 0.8)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis={'title': '', 'tickangle': -45},
+                showlegend=True,
+                legend=dict(orientation="h", y=1.1),
+                margin=dict(l=50, r=50, t=60, b=80)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with row3_cols[1]:
+            st.markdown("#### CA total par CLV + Taux de churn")
+            
+            ca_clv = df_filtered.groupby('CLV_Cat').agg({
+                'Total Revenue': 'sum',
+                'Customer ID': 'count',
+                'Customer Status': lambda x: (x == 'Churned').sum()
+            }).reset_index()
+            ca_clv.columns = ['CLV_Cat', 'CA', 'Total', 'Churned']
+            ca_clv['CA_M'] = (ca_clv['CA'] / 1_000_000).round(2)
+            ca_clv['Churn_Rate'] = (ca_clv['Churned'] / ca_clv['Total'] * 100).round(1)
+            ca_clv = ca_clv.dropna().sort_values('CLV_Cat')
+            
+            fig = make_subplots(specs=[[{"secondary_y": True}]])
+            
+            fig.add_trace(go.Scatter(
+                x=ca_clv['CLV_Cat'].astype(str),
+                y=ca_clv['CA_M'],
+                name='CA Total (M€)',
+                mode='lines+markers',
+                line=dict(color='#9b59b6', width=4),
+                marker=dict(size=10),
+                fill='tozeroy',
+                fillcolor='rgba(155, 89, 182, 0.3)'
+            ), secondary_y=False)
+            
+            fig.add_trace(go.Scatter(
+                x=ca_clv['CLV_Cat'].astype(str),
+                y=ca_clv['Churn_Rate'],
+                name='Taux de churn (%)',
+                mode='lines+markers',
+                line=dict(color='#e74c3c', width=4, dash='dot'),
+                marker=dict(size=10, symbol='diamond')
+            ), secondary_y=True)
+            
+            fig.update_yaxes(title_text="CA (M€)", secondary_y=False, showgrid=True, gridcolor='rgba(255,255,255,0.1)')
+            fig.update_yaxes(title_text="Taux de churn (%)", secondary_y=True, showgrid=False)
+            
+            fig.update_layout(
+                height=350,
+                plot_bgcolor='rgba(52, 73, 94, 0.8)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis={'title': '', 'tickangle': -45},
+                showlegend=True,
+                legend=dict(orientation="h", y=1.1),
+                margin=dict(l=50, r=50, t=60, b=80)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # ROW 4 - Carte CA + Top 10 villes
+        row4_cols = st.columns([3, 2])
+        
+        with row4_cols[0]:
+            st.markdown("#### 🗺️ Cartographie du CA par zone (Californie)")
+            
+            ca_geo = df_filtered.groupby(['City', 'Latitude', 'Longitude']).agg({
+                'Total Revenue': 'sum',
+                'Customer ID': 'count',
+                'Customer Status': lambda x: (x == 'Churned').sum()
+            }).reset_index()
+            ca_geo.columns = ['City', 'Latitude', 'Longitude', 'CA', 'Total', 'Churned']
+            ca_geo['CA_M'] = (ca_geo['CA'] / 1_000_000).round(2)
+            ca_geo['Churn_Rate'] = (ca_geo['Churned'] / ca_geo['Total'] * 100).round(1)
+            ca_geo_clean = ca_geo.dropna(subset=['Latitude', 'Longitude'])
+            
+            if len(ca_geo_clean) > 0:
+                fig = px.scatter_mapbox(
+                    ca_geo_clean,
+                    lat='Latitude',
+                    lon='Longitude',
+                    size='CA_M',
+                    color='Churn_Rate',
+                    hover_name='City',
+                    hover_data={'CA_M': ':.2f', 'Churn_Rate': ':.1f', 'Latitude': False, 'Longitude': False},
+                    color_continuous_scale=['#27AE60', '#f39c12', '#e74c3c'],
+                    size_max=40,
+                    zoom=5.5,
+                    center={'lat': 36.7783, 'lon': -119.4179},
+                    mapbox_style='carto-darkmatter'
+                )
+                fig.update_layout(
+                    height=400,
+                    margin=dict(l=0, r=0, t=0, b=0),
+                    coloraxis_colorbar=dict(title="Churn %")
+                )
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with row4_cols[1]:
+            st.markdown("#### Top 10 villes par CA")
+            
+            top10_ca = ca_geo.nlargest(10, 'CA_M')
+            
+            fig = go.Figure(go.Bar(
+                y=top10_ca['City'],
+                x=top10_ca['CA_M'],
+                orientation='h',
+                marker=dict(
+                    color=top10_ca['CA_M'],
+                    colorscale='Greens',
+                    showscale=False
+                ),
+                text=top10_ca['CA_M'].apply(lambda x: f"{x:.2f}M€"),
+                textposition='outside',
+                textfont=dict(color='white', size=11)
+            ))
+            fig.update_layout(
+                height=400,
+                plot_bgcolor='rgba(52, 73, 94, 0.8)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                xaxis={'title': 'CA (M€)', 'showgrid': True, 'gridcolor': 'rgba(255,255,255,0.1)'},
+                yaxis={'title': '', 'autorange': 'reversed'},
+                showlegend=False,
+                margin=dict(l=120, r=50, t=20, b=50)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+
+with tab5:
+    st.markdown('<h2 class="sub-title">🔥 Focus SAN DIEGO - Ville Critique (Churn 64.9%)</h2>', unsafe_allow_html=True)
+    
+    # Filtrer San Diego uniquement
+    df_san_diego = df_filtered[df_filtered['City'] == 'San Diego'].copy()
+    
+    if len(df_san_diego) == 0:
+        st.warning("⚠️ Aucune donnée pour San Diego avec les filtres actuels")
     else:
-        st.warning("Aucune donnée pour San Diego 67+ ans")
+        # HEADER - KPIs San Diego
+        sd_total = len(df_san_diego)
+        sd_churned = len(df_san_diego[df_san_diego['Customer Status'] == 'Churned'])
+        sd_churn_rate = (sd_churned / sd_total * 100).round(1) if sd_total > 0 else 0
+        sd_ca = (df_san_diego['Total Revenue'].sum() / 1_000_000).round(2)
+        
+        kpi_sd = st.columns(4)
+        
+        with kpi_sd[0]:
+            st.markdown(f"""
+            <div class="kpi-card red">
+                <div class="kpi-value">{sd_churn_rate}%</div>
+                <div class="kpi-label">Taux de Churn</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with kpi_sd[1]:
+            st.markdown(f"""
+            <div class="kpi-card dark">
+                <div class="kpi-value">{sd_total}</div>
+                <div class="kpi-label">Clients Totaux</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with kpi_sd[2]:
+            st.markdown(f"""
+            <div class="kpi-card red">
+                <div class="kpi-value">{sd_churned}</div>
+                <div class="kpi-label">Clients Perdus</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with kpi_sd[3]:
+            st.markdown(f"""
+            <div class="kpi-card blue">
+                <div class="kpi-value">{sd_ca}M€</div>
+                <div class="kpi-label">Chiffre d'Affaires</div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # ROW 1 - Carte quartiers + Répartition offre
+        row1_cols = st.columns([2, 1])
+        
+        with row1_cols[0]:
+            st.markdown("#### 🗺️ Répartition géographique par quartier")
+            
+            # Grouper par coordonnées (quartiers approximatifs)
+            district_map = df_san_diego.groupby(['Latitude', 'Longitude']).agg({
+                'Customer ID': 'count',
+                'Customer Status': lambda x: (x == 'Churned').sum()
+            }).reset_index()
+            district_map.columns = ['Latitude', 'Longitude', 'Total', 'Churned']
+            district_map['Churn_Rate'] = (district_map['Churned'] / district_map['Total'] * 100).round(1)
+            district_map = district_map.dropna()
+            
+            if len(district_map) > 0:
+                fig = px.scatter_mapbox(
+                    district_map,
+                    lat='Latitude',
+                    lon='Longitude',
+                    size='Total',
+                    color='Churn_Rate',
+                    hover_data={'Total': True, 'Churned': True, 'Churn_Rate': ':.1f%', 
+                               'Latitude': False, 'Longitude': False},
+                    color_continuous_scale='Reds',
+                    size_max=50,
+                    zoom=10,
+                    center={'lat': 32.7157, 'lon': -117.1611},
+                    mapbox_style='satellite-streets'
+                )
+                fig.update_layout(
+                    height=400,
+                    margin=dict(l=0, r=0, t=0, b=0),
+                    coloraxis_colorbar=dict(title="Churn %", ticksuffix="%")
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("Pas assez de données géographiques pour cartographier les quartiers")
+        
+        with row1_cols[1]:
+            st.markdown("#### Part des souscriptions aux offres")
+            
+            offer_sd = df_san_diego['Offer'].value_counts()
+            
+            fig = go.Figure(data=[go.Pie(
+                labels=offer_sd.index,
+                values=offer_sd.values,
+                hole=0.5,
+                marker=dict(colors=px.colors.qualitative.Bold),
+                textposition='inside',
+                textinfo='label+percent',
+                textfont=dict(size=14, color='white')
+            )])
+            fig.update_layout(
+                height=400,
+                paper_bgcolor='rgba(0,0,0,0)',
+                showlegend=True,
+                legend=dict(orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.05),
+                margin=dict(l=0, r=100, t=0, b=0)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # ROW 2 - Tranches d'âge + Genre + Contrat
+        row2_cols = st.columns(3)
+        
+        with row2_cols[0]:
+            st.markdown("#### Répartition par tranche d'âge")
+            
+            age_sd = df_san_diego.groupby('Tranche_Age').size().reset_index(name='Count')
+            age_sd = age_sd.dropna().sort_values('Count', ascending=False)
+            
+            fig = go.Figure(data=[go.Pie(
+                labels=age_sd['Tranche_Age'].astype(str),
+                values=age_sd['Count'],
+                hole=0.4,
+                marker=dict(colors=px.colors.sequential.Reds),
+                textposition='inside',
+                textinfo='label+percent',
+                textfont=dict(size=12, color='white', family='Arial Black')
+            )])
+            fig.update_layout(
+                height=300,
+                paper_bgcolor='rgba(0,0,0,0)',
+                showlegend=False,
+                margin=dict(l=0, r=0, t=0, b=0)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with row2_cols[1]:
+            st.markdown("#### Répartition par genre")
+            
+            gender_sd = df_san_diego['Gender'].value_counts()
+            
+            fig = go.Figure(data=[go.Pie(
+                labels=gender_sd.index,
+                values=gender_sd.values,
+                hole=0.5,
+                marker=dict(colors=['#34495e', '#e91e63']),
+                textposition='inside',
+                textinfo='label+percent',
+                textfont=dict(size=16, color='white', family='Arial Black')
+            )])
+            fig.update_layout(
+                height=300,
+                paper_bgcolor='rgba(0,0,0,0)',
+                showlegend=False,
+                margin=dict(l=0, r=0, t=0, b=0)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with row2_cols[2]:
+            st.markdown("#### Répartition par contrat")
+            
+            contract_sd = df_san_diego['Contract'].value_counts()
+            
+            contract_colors_pie = {
+                'Month-to-Month': '#f39c12',
+                'One Year': '#3498db',
+                'Two Year': '#27AE60'
+            }
+            colors_list = [contract_colors_pie.get(c, '#95a5a6') for c in contract_sd.index]
+            
+            fig = go.Figure(data=[go.Pie(
+                labels=contract_sd.index,
+                values=contract_sd.values,
+                hole=0.5,
+                marker=dict(colors=colors_list),
+                textposition='inside',
+                textinfo='label+percent',
+                textfont=dict(size=13, color='white', family='Arial Black')
+            )])
+            fig.update_layout(
+                height=300,
+                paper_bgcolor='rgba(0,0,0,0)',
+                showlegend=False,
+                margin=dict(l=0, r=0, t=0, b=0)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # ROW 3 - Raisons désabonnement + Taux attrition CLV
+        row3_cols = st.columns([1, 1])
+        
+        with row3_cols[0]:
+            st.markdown("#### 🚨 Raisons du désabonnement")
+            
+            if 'Churn Category' in df_san_diego.columns:
+                churn_sd = df_san_diego[df_san_diego['Customer Status'] == 'Churned']
+                if len(churn_sd) > 0:
+                    reasons_sd = churn_sd['Churn Category'].value_counts().head(7)
+                    
+                    fig = go.Figure(go.Bar(
+                        y=reasons_sd.index,
+                        x=reasons_sd.values,
+                        orientation='h',
+                        marker=dict(
+                            color=['#e74c3c', '#f39c12', '#3498db', '#9b59b6', '#1abc9c', '#e67e22', '#95a5a6'][:len(reasons_sd)],
+                            line=dict(color='white', width=2)
+                        ),
+                        text=reasons_sd.values,
+                        textposition='outside',
+                        textfont=dict(color='white', size=14, family='Arial Black')
+                    ))
+                    fig.update_layout(
+                        height=350,
+                        plot_bgcolor='rgba(52, 73, 94, 0.8)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        xaxis={'title': 'Nombre de clients', 'showgrid': True, 'gridcolor': 'rgba(255,255,255,0.1)'},
+                        yaxis={'title': '', 'autorange': 'reversed'},
+                        showlegend=False,
+                        margin=dict(l=150, r=50, t=20, b=50)
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("Aucun client churned pour analyser les raisons")
+            else:
+                st.warning("Colonne 'Churn Category' non disponible")
+        
+        with row3_cols[1]:
+            st.markdown("#### Taux d'attrition par CLV")
+            
+            clv_sd = df_san_diego.groupby('CLV_Cat').agg({
+                'Customer ID': 'count',
+                'Customer Status': lambda x: (x == 'Churned').sum()
+            }).reset_index()
+            clv_sd.columns = ['CLV_Cat', 'Total', 'Churned']
+            clv_sd['Churn_Rate'] = (clv_sd['Churned'] / clv_sd['Total'] * 100).round(1)
+            clv_sd = clv_sd.dropna()
+            
+            if len(clv_sd) > 0:
+                fig = make_subplots(specs=[[{"secondary_y": True}]])
+                
+                fig.add_trace(go.Bar(
+                    x=clv_sd['CLV_Cat'].astype(str),
+                    y=clv_sd['Total'],
+                    name='Nombre clients',
+                    marker=dict(color='#3498db'),
+                    text=clv_sd['Total'],
+                    textposition='outside'
+                ), secondary_y=False)
+                
+                fig.add_trace(go.Scatter(
+                    x=clv_sd['CLV_Cat'].astype(str),
+                    y=clv_sd['Churn_Rate'],
+                    name='Taux de churn (%)',
+                    mode='lines+markers',
+                    line=dict(color='#e74c3c', width=4),
+                    marker=dict(size=12, symbol='diamond')
+                ), secondary_y=True)
+                
+                fig.update_yaxes(title_text="Nombre clients", secondary_y=False)
+                fig.update_yaxes(title_text="Taux de churn (%)", secondary_y=True)
+                
+                fig.update_layout(
+                    height=350,
+                    plot_bgcolor='rgba(52, 73, 94, 0.8)',
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    xaxis={'title': 'Catégorie CLV', 'tickangle': -45},
+                    showlegend=True,
+                    legend=dict(orientation="h", y=1.1),
+                    margin=dict(l=50, r=50, t=60, b=80)
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("Données CLV insuffisantes")
+        
+        st.markdown("---")
+        
+        # FOOTER - Recommandations
+        st.markdown("""
+        ### 💡 Recommandations stratégiques pour San Diego
+        
+        **Actions prioritaires :**
+        - 🎯 **Retention campaigns** ciblées sur les segments à fort churn
+        - 📞 **Proactive outreach** pour les clients Month-to-Month
+        - 💰 **Incentives** pour upgrade vers contrats annuels
+        - 🔍 **Root cause analysis** sur raisons principales de départ
+        - 📊 **Monitoring continu** des quartiers à risque élevé
+        """)
