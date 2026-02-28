@@ -29,7 +29,7 @@ warnings.filterwarnings('ignore')
 # ============================================================================
 
 st.set_page_config(
-    page_title="Dashboard Telco - Analyse attrition période 2024",
+    page_title="Dashboard Telco Premium - 17/02/2024",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -681,7 +681,7 @@ def main():
     st.markdown("""
     <div class="main-header">
         <h1 class="main-title">📊 Dashboard Telco - Analyse Attrition Client</h1>
-        <p class="sub-title">Année 2024</p>
+        <p class="sub-title">Édition Premium - 17/02/2024</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -706,7 +706,8 @@ def main():
         "🔄 Comportement Churn",
         "😊 Satisfaction",
         "💰 Coût du Churn",
-        "🔥 Focus San Diego"
+        "🔥 Focus San Diego",
+        "🗺️ Géographie"
     ])
     
     # Onglet 1: Vue d'ensemble
@@ -743,6 +744,13 @@ def main():
             UIComponents.show_empty_state()
         else:
             render_sandiego_tab(df_filtered)
+    
+    # Onglet 6: Géographie
+    with tabs[5]:
+        if not is_valid_filtered:
+            UIComponents.show_empty_state()
+        else:
+            render_geography_tab(df_filtered)
 
 # ============================================================================
 # GRAPHIQUES - ONGLET VUE D'ENSEMBLE
@@ -890,74 +898,6 @@ def create_gender_donut(df: pd.DataFrame) -> Optional[go.Figure]:
         
     except Exception as e:
         st.error(f"Erreur create_gender_donut: {str(e)}")
-        return None
-
-def create_california_map(df: pd.DataFrame) -> Optional[go.Figure]:
-    """Créer la carte géographique de Californie"""
-    try:
-        # Grouper par coordonnées géographiques exactes (pas par nom de ville)
-        # Cela agrège tous les clients d'une même zone géographique
-        city_geo = df.groupby(['Latitude', 'Longitude']).agg({
-            'CustomerID': 'count',
-            'Customer Status': lambda x: (x == 'Churned').sum(),
-            'City': 'first'  # Prendre le premier nom de ville comme label
-        }).reset_index()
-        city_geo.columns = ['Latitude', 'Longitude', 'Total', 'Churned', 'City']
-        
-        # Protection division par zéro
-        city_geo['Churn_Rate'] = city_geo.apply(
-            lambda row: DataValidator.safe_percentage(row['Churned'], row['Total']),
-            axis=1
-        )
-        
-        city_geo_clean = city_geo.dropna(subset=['Latitude', 'Longitude'])
-        
-        if len(city_geo_clean) == 0:
-            return None
-        
-        # Grouper par zone géographique et compter les churned
-        city_geo_clean = city_geo.dropna(subset=['Latitude', 'Longitude'])
-        
-        if len(city_geo_clean) == 0:
-            return None
-        
-        # Afficher TOUTES les villes qui ont des churned
-        city_with_churn = city_geo_clean[city_geo_clean['Churned'] > 0].copy()
-        
-        if len(city_with_churn) == 0:
-            return None
-        
-        fig = px.scatter_mapbox(
-            city_with_churn,
-            lat='Latitude',
-            lon='Longitude',
-            size='Churned',  # TAILLE = Nombre de churned (plus il y a de pertes, plus c'est gros)
-            color='Churn_Rate',  # COULEUR = Taux de churn (intensité du problème)
-            hover_name='City',
-            hover_data={
-                'Total': True,  # Nombre total de clients
-                'Churned': True,  # Nombre de churned
-                'Churn_Rate': ':.1f%',  # Taux de churn
-                'Latitude': False,  # Masquer coordonnées
-                'Longitude': False  # Masquer coordonnées
-                # PAS de CustomerID (RGPD)
-            },
-            color_continuous_scale=['#F39C12', '#E74C3C', '#C0392B'],  # Orange → Rouge foncé
-            size_max=50,  # Bulles visibles
-            zoom=5.5,
-            mapbox_style='carto-darkmatter'
-        )
-        
-        fig.update_layout(
-            height=300,
-            margin=dict(l=0, r=0, t=0, b=0),
-            coloraxis_colorbar=dict(title="Churn %", ticksuffix="%")
-        )
-        
-        return fig
-        
-    except Exception as e:
-        st.error(f"Erreur create_california_map: {str(e)}")
         return None
 
 def create_contract_bar_chart(df: pd.DataFrame) -> Optional[go.Figure]:
@@ -1265,15 +1205,10 @@ def render_overview_tab(df: pd.DataFrame):
         except Exception as e:
             st.error(f"Erreur donut gender: {str(e)}")
     
-    # GRAPHIQUE 4: Carte géographique
+    # GRAPHIQUE 4: Placeholder pour futur graphique
     with row1_cols[3]:
-        st.markdown("#### 🗺️ Carte Californie")
-        try:
-            fig = create_california_map(df)
-            if fig:
-                st.plotly_chart(fig, use_container_width=True, key='map_ca')
-        except Exception as e:
-            st.error(f"Erreur carte: {str(e)}")
+        st.markdown("#### 📊 Autre vue métier")
+        st.info("🚧 Espace disponible pour un graphique additionnel")
     
     st.markdown("---")
     
@@ -1337,6 +1272,427 @@ def render_cost_tab(df: pd.DataFrame):
     st.markdown('<h2 class="sub-title">Coût du Churn</h2>', 
                 unsafe_allow_html=True)
     st.info("🚧 En cours de développement...")
+
+def render_geography_tab(df: pd.DataFrame):
+    """Onglet Géographie avec 3 modes de visualisation"""
+    st.markdown('<h2 class="sub-title">🗺️ Analyse Géographique du Churn en Californie</h2>', 
+                unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div class="alert alert-info">
+        💡 <strong>Explorez le churn géographiquement</strong> avec 3 modes d'analyse complémentaires.
+        Chaque mode répond à une question métier spécifique.
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # ========== SÉLECTION DU MODE ==========
+    st.markdown("---")
+    mode_cols = st.columns(3)
+    
+    with mode_cols[0]:
+        mode_1 = st.button(
+            "🔥 Zones Critiques",
+            use_container_width=True,
+            help="Villes qui dépassent un seuil de churn critique",
+            key='btn_mode1'
+        )
+    
+    with mode_cols[1]:
+        mode_2 = st.button(
+            "📍 Top N Villes",
+            use_container_width=True,
+            help="Les N villes avec le plus de pertes en volume",
+            key='btn_mode2'
+        )
+    
+    with mode_cols[2]:
+        mode_3 = st.button(
+            "🗺️ Vue Complète",
+            use_container_width=True,
+            help="Vision panoramique de toute la Californie",
+            key='btn_mode3'
+        )
+    
+    # Déterminer le mode actif (par défaut Mode 1)
+    if 'geo_mode' not in st.session_state:
+        st.session_state.geo_mode = 1
+    
+    if mode_1:
+        st.session_state.geo_mode = 1
+    elif mode_2:
+        st.session_state.geo_mode = 2
+    elif mode_3:
+        st.session_state.geo_mode = 3
+    
+    current_mode = st.session_state.geo_mode
+    
+    st.markdown("---")
+    
+    # ========== MODE 1: ZONES CRITIQUES ==========
+    if current_mode == 1:
+        st.markdown("### 🔥 Mode: Zones Critiques")
+        st.markdown("""
+        <div class="description-box" style="background: rgba(243, 156, 18, 0.1); 
+             border-left: 4px solid #f39c12; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+            <h4 style="color: #f39c12; margin-bottom: 8px;">🎯 Objectif métier</h4>
+            <p style="color: #ecf0f1; font-size: 14px;">
+                Identifier rapidement les <strong>zones en crise</strong> dépassant un seuil de churn critique. 
+                Permet de prioriser les actions terrain sur les villes nécessitant une intervention urgente.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Contrôles
+        control_cols = st.columns(2)
+        with control_cols[0]:
+            churn_threshold = st.slider(
+                '🎯 Taux de churn minimum (%)',
+                min_value=15,
+                max_value=50,
+                value=30,
+                step=5,
+                key='threshold_mode1'
+            )
+        
+        with control_cols[1]:
+            size_metric = st.radio(
+                "📊 Taille des bulles",
+                options=['Volume churned', 'Taux de churn'],
+                horizontal=True,
+                key='size_mode1'
+            )
+        
+        # Créer la carte
+        fig = create_geography_map_mode1(df, churn_threshold, size_metric)
+        if fig:
+            st.plotly_chart(fig, use_container_width=True, key='geo_map_mode1')
+    
+    # ========== MODE 2: TOP N VILLES ==========
+    elif current_mode == 2:
+        st.markdown("### 📍 Mode: Top N Villes")
+        st.markdown("""
+        <div class="description-box" style="background: rgba(243, 156, 18, 0.1); 
+             border-left: 4px solid #f39c12; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+            <h4 style="color: #f39c12; margin-bottom: 8px;">🎯 Objectif métier</h4>
+            <p style="color: #ecf0f1; font-size: 14px;">
+                Focaliser l'analyse sur les <strong>N villes avec le plus de pertes</strong> en volume absolu. 
+                Répond à la question : "Où perdons-nous le PLUS de clients ?"
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Contrôles
+        control_cols = st.columns(2)
+        with control_cols[0]:
+            top_n = st.slider(
+                '🔢 Nombre de villes à afficher',
+                min_value=3,
+                max_value=15,
+                value=5,
+                step=1,
+                key='topn_mode2'
+            )
+        
+        with control_cols[1]:
+            sort_by = st.radio(
+                "📊 Trier par",
+                options=['Volume churned', 'Taux de churn'],
+                horizontal=True,
+                key='sort_mode2'
+            )
+        
+        # Créer la carte
+        fig = create_geography_map_mode2(df, top_n, sort_by)
+        if fig:
+            st.plotly_chart(fig, use_container_width=True, key='geo_map_mode2')
+    
+    # ========== MODE 3: VUE COMPLÈTE ==========
+    else:
+        st.markdown("### 🗺️ Mode: Vue Complète")
+        st.markdown("""
+        <div class="description-box" style="background: rgba(243, 156, 18, 0.1); 
+             border-left: 4px solid #f39c12; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+            <h4 style="color: #f39c12; margin-bottom: 8px;">🎯 Objectif métier</h4>
+            <p style="color: #ecf0f1; font-size: 14px;">
+                Vision <strong>panoramique</strong> de toute la Californie avec toutes les villes ayant du churn. 
+                Permet d'identifier les clusters géographiques et patterns de distribution.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Contrôles
+        control_cols = st.columns(2)
+        with control_cols[0]:
+            min_churned = st.slider(
+                '🎯 Minimum churned par ville',
+                min_value=0,
+                max_value=20,
+                value=1,
+                step=1,
+                key='min_mode3'
+            )
+        
+        with control_cols[1]:
+            opacity = st.slider(
+                '👁️ Opacité des bulles',
+                min_value=30,
+                max_value=100,
+                value=70,
+                step=10,
+                key='opacity_mode3'
+            )
+        
+        # Créer la carte
+        fig = create_geography_map_mode3(df, min_churned, opacity)
+        if fig:
+            st.plotly_chart(fig, use_container_width=True, key='geo_map_mode3')
+
+# ============================================================================
+# FONCTIONS DE CRÉATION DES CARTES PAR MODE
+# ============================================================================
+
+def create_geography_map_mode1(df: pd.DataFrame, threshold: int, size_metric: str) -> Optional[go.Figure]:
+    """Mode 1: Zones Critiques - Villes dépassant le seuil"""
+    try:
+        # Préparer les données
+        city_geo = df.groupby(['Latitude', 'Longitude']).agg({
+            'CustomerID': 'count',
+            'Customer Status': lambda x: (x == 'Churned').sum(),
+            'City': 'first'
+        }).reset_index()
+        city_geo.columns = ['Latitude', 'Longitude', 'Total', 'Churned', 'City']
+        
+        city_geo['Churn_Rate'] = city_geo.apply(
+            lambda row: DataValidator.safe_percentage(row['Churned'], row['Total']),
+            axis=1
+        )
+        
+        city_geo_clean = city_geo.dropna(subset=['Latitude', 'Longitude'])
+        city_geo_clean = city_geo_clean[city_geo_clean['Churned'] > 0]
+        
+        # Filtrer par seuil
+        city_filtered = city_geo_clean[city_geo_clean['Churn_Rate'] >= threshold].copy()
+        
+        if len(city_filtered) == 0:
+            st.warning(f"⚠️ Aucune ville ne dépasse le seuil de {threshold}%")
+            return None
+        
+        # Déterminer la métrique de taille
+        size_col = 'Churned' if size_metric == 'Volume churned' else 'Churn_Rate'
+        
+        # Créer la carte
+        fig = px.scatter_mapbox(
+            city_filtered,
+            lat='Latitude',
+            lon='Longitude',
+            size=size_col,
+            color='Churn_Rate',
+            hover_name='City',
+            hover_data={
+                'Total': True,
+                'Churned': True,
+                'Churn_Rate': ':.1f%',
+                'Latitude': False,
+                'Longitude': False
+            },
+            color_continuous_scale=['#F39C12', '#E74C3C', '#C0392B'],
+            size_max=60,
+            zoom=5.5,
+            mapbox_style='carto-darkmatter',
+            opacity=0.9
+        )
+        
+        fig.update_layout(
+            height=500,
+            margin=dict(l=0, r=0, t=0, b=0),
+            coloraxis_colorbar=dict(title="Churn %", ticksuffix="%")
+        )
+        
+        # Insights automatiques
+        total_churned_displayed = city_filtered['Churned'].sum()
+        total_churned_all = city_geo_clean['Churned'].sum()
+        pct_concentration = (total_churned_displayed / total_churned_all * 100) if total_churned_all > 0 else 0
+        avg_churn_rate = city_filtered['Churn_Rate'].mean()
+        
+        st.markdown(f"""
+        <div class="alert alert-warning">
+            💡 <strong>Insights - Zones Critiques:</strong><br>
+            • <strong>{len(city_filtered)} villes</strong> dépassent le seuil de {threshold}% de churn<br>
+            • Ces zones concentrent <strong>{total_churned_displayed:,} clients churned</strong> ({pct_concentration:.1f}% du total)<br>
+            • Taux moyen dans ces zones: <strong>{avg_churn_rate:.1f}%</strong><br>
+            • Ville la plus critique: <strong>{city_filtered.nlargest(1, 'Churn_Rate')['City'].values[0]}</strong> 
+              ({city_filtered.nlargest(1, 'Churn_Rate')['Churn_Rate'].values[0]:.1f}%)
+        </div>
+        """, unsafe_allow_html=True)
+        
+        return fig
+        
+    except Exception as e:
+        st.error(f"Erreur Mode 1: {str(e)}")
+        return None
+
+def create_geography_map_mode2(df: pd.DataFrame, top_n: int, sort_by: str) -> Optional[go.Figure]:
+    """Mode 2: Top N Villes - Les villes avec le plus de pertes"""
+    try:
+        # Préparer les données
+        city_geo = df.groupby(['Latitude', 'Longitude']).agg({
+            'CustomerID': 'count',
+            'Customer Status': lambda x: (x == 'Churned').sum(),
+            'City': 'first'
+        }).reset_index()
+        city_geo.columns = ['Latitude', 'Longitude', 'Total', 'Churned', 'City']
+        
+        city_geo['Churn_Rate'] = city_geo.apply(
+            lambda row: DataValidator.safe_percentage(row['Churned'], row['Total']),
+            axis=1
+        )
+        
+        city_geo_clean = city_geo.dropna(subset=['Latitude', 'Longitude'])
+        city_geo_clean = city_geo_clean[city_geo_clean['Churned'] > 0]
+        
+        # Trier et prendre le top N
+        sort_col = 'Churned' if sort_by == 'Volume churned' else 'Churn_Rate'
+        city_filtered = city_geo_clean.nlargest(top_n, sort_col).copy()
+        
+        if len(city_filtered) == 0:
+            return None
+        
+        # Créer la carte
+        fig = px.scatter_mapbox(
+            city_filtered,
+            lat='Latitude',
+            lon='Longitude',
+            size='Churned',
+            color='Churn_Rate',
+            hover_name='City',
+            hover_data={
+                'Total': True,
+                'Churned': True,
+                'Churn_Rate': ':.1f%',
+                'Latitude': False,
+                'Longitude': False
+            },
+            color_continuous_scale=['#F39C12', '#E74C3C', '#C0392B'],
+            size_max=70,
+            zoom=5.5,
+            mapbox_style='carto-darkmatter',
+            opacity=0.9
+        )
+        
+        fig.update_layout(
+            height=500,
+            margin=dict(l=0, r=0, t=0, b=0),
+            coloraxis_colorbar=dict(title="Churn %", ticksuffix="%")
+        )
+        
+        # Insights automatiques
+        total_churned_displayed = city_filtered['Churned'].sum()
+        total_churned_all = city_geo_clean['Churned'].sum()
+        pct_concentration = (total_churned_displayed / total_churned_all * 100) if total_churned_all > 0 else 0
+        avg_churn_rate = city_filtered['Churn_Rate'].mean()
+        
+        # Top 3 villes
+        top_3 = city_filtered.nlargest(3, 'Churned')
+        top_3_list = ", ".join([f"{row['City']} ({row['Churned']})" for _, row in top_3.iterrows()])
+        
+        st.markdown(f"""
+        <div class="alert alert-info">
+            💡 <strong>Insights - Top {top_n} Villes:</strong><br>
+            • Top {top_n} villes concentrent <strong>{total_churned_displayed:,} clients churned</strong> ({pct_concentration:.1f}% du total)<br>
+            • Taux moyen: <strong>{avg_churn_rate:.1f}%</strong><br>
+            • Podium des pertes: <strong>{top_3_list}</strong><br>
+            • Impact potentiel: Retenir 50% = <strong>~{int(total_churned_displayed * 0.5):,} clients sauvés</strong>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        return fig
+        
+    except Exception as e:
+        st.error(f"Erreur Mode 2: {str(e)}")
+        return None
+
+def create_geography_map_mode3(df: pd.DataFrame, min_churned: int, opacity: int) -> Optional[go.Figure]:
+    """Mode 3: Vue Complète - Toutes les villes avec patterns géographiques"""
+    try:
+        # Préparer les données
+        city_geo = df.groupby(['Latitude', 'Longitude']).agg({
+            'CustomerID': 'count',
+            'Customer Status': lambda x: (x == 'Churned').sum(),
+            'City': 'first'
+        }).reset_index()
+        city_geo.columns = ['Latitude', 'Longitude', 'Total', 'Churned', 'City']
+        
+        city_geo['Churn_Rate'] = city_geo.apply(
+            lambda row: DataValidator.safe_percentage(row['Churned'], row['Total']),
+            axis=1
+        )
+        
+        city_geo_clean = city_geo.dropna(subset=['Latitude', 'Longitude'])
+        
+        # Filtrer par minimum churned
+        city_filtered = city_geo_clean[city_geo_clean['Churned'] >= min_churned].copy()
+        
+        if len(city_filtered) == 0:
+            st.warning(f"⚠️ Aucune ville avec au moins {min_churned} churned")
+            return None
+        
+        # Créer la carte
+        fig = px.scatter_mapbox(
+            city_filtered,
+            lat='Latitude',
+            lon='Longitude',
+            size='Churned',
+            color='Churn_Rate',
+            hover_name='City',
+            hover_data={
+                'Total': True,
+                'Churned': True,
+                'Churn_Rate': ':.1f%',
+                'Latitude': False,
+                'Longitude': False
+            },
+            color_continuous_scale=['#F39C12', '#E74C3C', '#C0392B'],
+            size_max=40,
+            zoom=5.5,
+            mapbox_style='carto-darkmatter',
+            opacity=opacity / 100
+        )
+        
+        fig.update_layout(
+            height=500,
+            margin=dict(l=0, r=0, t=0, b=0),
+            coloraxis_colorbar=dict(title="Churn %", ticksuffix="%")
+        )
+        
+        # Insights géographiques
+        total_cities = len(city_filtered)
+        total_churned = city_filtered['Churned'].sum()
+        avg_churn_rate = city_filtered['Churn_Rate'].mean()
+        
+        # Identifier zones géographiques (simple heuristique)
+        south = city_filtered[city_filtered['Latitude'] < 34]
+        north = city_filtered[city_filtered['Latitude'] >= 37]
+        center = city_filtered[(city_filtered['Latitude'] >= 34) & (city_filtered['Latitude'] < 37)]
+        
+        south_avg = south['Churn_Rate'].mean() if len(south) > 0 else 0
+        north_avg = north['Churn_Rate'].mean() if len(north) > 0 else 0
+        center_avg = center['Churn_Rate'].mean() if len(center) > 0 else 0
+        
+        st.markdown(f"""
+        <div class="alert alert-success">
+            💡 <strong>Insights - Vue Complète:</strong><br>
+            • <strong>{total_cities} villes</strong> affichées avec au moins {min_churned} client(s) churned<br>
+            • Total churned affiché: <strong>{total_churned:,}</strong> clients<br>
+            • Taux moyen global: <strong>{avg_churn_rate:.1f}%</strong><br>
+            • Pattern géographique: Sud ({south_avg:.1f}%) vs Centre ({center_avg:.1f}%) vs Nord ({north_avg:.1f}%)
+        </div>
+        """, unsafe_allow_html=True)
+        
+        return fig
+        
+    except Exception as e:
+        st.error(f"Erreur Mode 3: {str(e)}")
+        return None
 
 def render_sandiego_tab(df: pd.DataFrame):
     """Onglet Focus San Diego"""
