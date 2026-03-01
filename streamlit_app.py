@@ -1515,7 +1515,7 @@ def render_geography_tab(df: pd.DataFrame):
 # ============================================================================
 
 def render_mode1_visuals(df: pd.DataFrame, threshold: int, max_cities: int):
-    """Mode 1: Visualisations des zones critiques"""
+    """Mode 1: Visualisations des zones critiques avec filtre de significativité"""
     try:
         # Préparer les données
         city_stats = df.groupby('City').agg({
@@ -1529,12 +1529,23 @@ def render_mode1_visuals(df: pd.DataFrame, threshold: int, max_cities: int):
             axis=1
         )
         
-        # Filtrer par seuil
-        critical_cities = city_stats[city_stats['Churn_Rate'] >= threshold].copy()
+        # === NOUVEAU: Filtrer par significativité statistique AVANT le seuil ===
+        min_clients_threshold = 50  # Seuil de significativité
+        city_stats_significant = city_stats[city_stats['Total'] >= min_clients_threshold].copy()
+        
+        excluded_count = len(city_stats) - len(city_stats_significant)
+        
+        # Message informatif sur le filtre
+        if excluded_count > 0:
+            st.info(f"ℹ️ **Filtre de significativité:** {excluded_count} villes exclues (< {min_clients_threshold} clients) - Analyse uniquement sur villes statistiquement valides")
+        
+        # Filtrer par seuil (sur données significatives)
+        critical_cities = city_stats_significant[city_stats_significant['Churn_Rate'] >= threshold].copy()
         critical_cities = critical_cities.nlargest(max_cities, 'Churn_Rate')
         
         if len(critical_cities) == 0:
-            st.warning(f"⚠️ Aucune ville ne dépasse le seuil de {threshold}%")
+            st.warning(f"⚠️ Aucune ville statistiquement significative (>= {min_clients_threshold} clients) ne dépasse le seuil de {threshold}%")
+            st.info(f"💡 **Suggestion:** Baisser le seuil de taux ou vérifier que des villes avec assez de clients existent dans les données.")
             return
         
         # === VIZ 1: Bar Chart Horizontal ===
