@@ -1764,30 +1764,52 @@ def render_mode2_visuals(df: pd.DataFrame, top_n: int, sort_by: str):
         
         fin_cols = st.columns(4)
         with fin_cols[0]:
-            UIComponents.render_kpi_card(
-                f"${financial['total_loss']:,.0f}",
-                "Pertes annuelles totales",
-                "red"
-            )
+            # Afficher en millions de dollars avec custom HTML
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, rgba(231, 76, 60, 0.2), rgba(192, 57, 43, 0.3)); 
+                        border: 2px solid #e74c3c; padding: 20px; border-radius: 10px; text-align: center;">
+                <div style="font-size: 32px; font-weight: bold; color: #e74c3c; margin-bottom: 8px;">
+                    ${financial['total_loss']:,.0f}
+                </div>
+                <div style="font-size: 14px; color: rgba(255,255,255,0.8);">
+                    Pertes annuelles totales
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
         with fin_cols[1]:
             UIComponents.render_kpi_card(
-                f"{financial['total_churned']:,}",
+                financial['total_churned'],
                 "Clients churned",
                 "dark"
             )
+        
         with fin_cols[2]:
-            UIComponents.render_kpi_card(
-                f"${financial['revenue_saved']:,.0f}",
-                "Récupération potentielle (30%)",
-                "yellow"
-            )
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, rgba(243, 156, 18, 0.2), rgba(211, 84, 0, 0.3)); 
+                        border: 2px solid #f39c12; padding: 20px; border-radius: 10px; text-align: center;">
+                <div style="font-size: 32px; font-weight: bold; color: #f39c12; margin-bottom: 8px;">
+                    ${financial['revenue_saved']:,.0f}
+                </div>
+                <div style="font-size: 14px; color: rgba(255,255,255,0.8);">
+                    Récupération potentielle (30%)
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
         with fin_cols[3]:
             roi_multiplier = (financial['revenue_saved'] / 10000) if financial['revenue_saved'] > 0 else 0
-            UIComponents.render_kpi_card(
-                f"{roi_multiplier:.0f}x",
-                "ROI campagne (budget $10K)",
-                "blue"
-            )
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, rgba(52, 152, 219, 0.2), rgba(41, 128, 185, 0.3)); 
+                        border: 2px solid #3498db; padding: 20px; border-radius: 10px; text-align: center;">
+                <div style="font-size: 32px; font-weight: bold; color: #3498db; margin-bottom: 8px;">
+                    {roi_multiplier:.0f}x
+                </div>
+                <div style="font-size: 14px; color: rgba(255,255,255,0.8);">
+                    ROI campagne (budget $10K)
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
         
         st.markdown("---")
         
