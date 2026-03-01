@@ -681,7 +681,7 @@ def main():
     st.markdown("""
     <div class="main-header">
         <h1 class="main-title">📊 Dashboard Telco - Analyse Attrition Client</h1>
-        <p class="sub-title">Année 2024</p>
+        <p class="sub-title">Édition Premium - 17/02/2024</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -1598,13 +1598,41 @@ def render_mode1_visuals(df: pd.DataFrame, threshold: int, max_cities: int):
         
         with col2:
             st.markdown("##### 📋 Actions recommandées")
-            # Catégorisation selon standards industrie télécoms
-            critical_cities['Action'] = critical_cities['Churn_Rate'].apply(
-                lambda x: '🚨 Urgence max' if x >= 30 
-                else '⚠️ Intervention rapide' if x >= 25 
-                else '⚡ Surveillance' if x >= 20
-                else '✅ Acceptable'
-            )
+            # Catégorisation experte basée sur IMPACT BUSINESS RÉEL
+            # Principe: Impact absolu (pertes $) prime sur taux relatif (%)
+            # Source: Reichheld & Sasser (HBR) - Priorité aux segments fort impact absolu
+            
+            # Calculer pertes financières pour chaque ville
+            critical_cities['Pertes'] = critical_cities['Churned'] * 3500
+            
+            def categorize_churn_priority(row):
+                """
+                Logique experte attrition client:
+                - Impact financier (pertes $) = critère principal
+                - Volume churned = critère secondaire
+                - Taux = critère tertiaire
+                Logique OR: un seul critère d'urgence suffit
+                """
+                pertes = row['Pertes']
+                volume = row['Churned']
+                taux = row['Churn_Rate']
+                
+                # URGENCE MAX: Impact majeur justifie action immédiate
+                if pertes >= 150000 or volume >= 50 or taux >= 30:
+                    return '🚨 Urgence max'
+                # INTERVENTION: Impact modéré-élevé nécessite plan action
+                elif pertes >= 75000 or volume >= 25 or taux >= 25:
+                    return '⚠️ Intervention rapide'
+                # SURVEILLANCE: Monitoring renforcé
+                elif taux >= 20:
+                    return '⚡ Surveillance'
+                else:
+                    return '✅ Acceptable'
+            
+            critical_cities['Action'] = critical_cities.apply(categorize_churn_priority, axis=1)
+            
+            # Trier par impact financier décroissant (priorité business réelle)
+            critical_cities = critical_cities.sort_values('Pertes', ascending=False)
             st.dataframe(
                 critical_cities[['City', 'Churn_Rate', 'Churned', 'Action']].head(10),
                 hide_index=True,
