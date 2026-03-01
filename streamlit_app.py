@@ -1775,10 +1775,15 @@ def render_mode2_visuals(df: pd.DataFrame, top_n: int, sort_by: str):
         if excluded_count > 0:
             st.info(f"ℹ️ **Filtre de significativité:** {excluded_count} villes exclues (< {min_clients_threshold} clients)")
         
-        # === NOUVEAU 1: IMPACT FINANCIER ===
+        # === TRIER ET PRENDRE TOP N D'ABORD (pour calcul financier dynamique) ===
+        sort_col = 'Churned' if sort_by == 'Volume churned' else 'Churn_Rate'
+        top_cities = city_stats_significant.nlargest(top_n, sort_col)
+        
+        # === IMPACT FINANCIER (sur TOP N villes sélectionnées par le slider) ===
         st.markdown("### 💰 Impact Financier")
         
-        financial = calculate_financial_impact(city_stats_significant)
+        # Calculer sur top_cities (dynamique selon slider)
+        financial = calculate_financial_impact(top_cities)
         
         fin_cols = st.columns(4)
         with fin_cols[0]:
@@ -1836,12 +1841,6 @@ def render_mode2_visuals(df: pd.DataFrame, top_n: int, sort_by: str):
         render_priority_matrix_visual(matrix_data)
         
         st.markdown("---")
-        
-        # === EXISTANT: Trier et prendre Top N (maintenant sur données significatives) ===
-        
-        # Trier et prendre Top N (sur données significatives)
-        sort_col = 'Churned' if sort_by == 'Volume churned' else 'Churn_Rate'
-        top_cities = city_stats_significant.nlargest(top_n, sort_col)
         
         # === VIZ 1: Podium Top 3 ===
         if len(top_cities) >= 3:
