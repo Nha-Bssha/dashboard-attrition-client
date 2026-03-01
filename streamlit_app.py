@@ -1739,8 +1739,15 @@ def render_priority_matrix_visual(matrix_data: dict):
             </p>
         """, unsafe_allow_html=True)
         
-        ignore_count = len(matrix_data.get('⚪ Ignore', pd.DataFrame()))
-        st.markdown(f"<p style='color: #95a5a6; font-size: 14px;'>{ignore_count} petites villes</p>", unsafe_allow_html=True)
+        ignore_cities = matrix_data.get('⚪ Ignore', pd.DataFrame())
+        if len(ignore_cities) > 0:
+            # Afficher les noms des villes (max 5 pour éviter surcharge visuelle)
+            cities_list = ", ".join(ignore_cities.head(5)['City'].tolist())
+            if len(ignore_cities) > 5:
+                cities_list += f" (+{len(ignore_cities) - 5} autres)"
+            st.markdown(f"<p style='color: #95a5a6; font-size: 14px;'>{cities_list}</p>", unsafe_allow_html=True)
+        else:
+            st.markdown("<p style='color: #95a5a6;'>Aucune</p>", unsafe_allow_html=True)
         
         st.markdown("</div>", unsafe_allow_html=True)
 
