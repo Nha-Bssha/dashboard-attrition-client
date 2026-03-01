@@ -681,7 +681,7 @@ def main():
     st.markdown("""
     <div class="main-header">
         <h1 class="main-title">📊 Dashboard Telco - Analyse Attrition Client</h1>
-        <p class="sub-title">Édition Premium - 17/02/2024</p>
+        <p class="sub-title">Année 2024</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -1598,8 +1598,12 @@ def render_mode1_visuals(df: pd.DataFrame, threshold: int, max_cities: int):
         
         with col2:
             st.markdown("##### 📋 Actions recommandées")
+            # Catégorisation selon standards industrie télécoms
             critical_cities['Action'] = critical_cities['Churn_Rate'].apply(
-                lambda x: '🚨 Urgence max' if x >= 40 else '⚠️ Intervention rapide' if x >= 35 else '⚡ Surveillance'
+                lambda x: '🚨 Urgence max' if x >= 30 
+                else '⚠️ Intervention rapide' if x >= 25 
+                else '⚡ Surveillance' if x >= 20
+                else '✅ Acceptable'
             )
             st.dataframe(
                 critical_cities[['City', 'Churn_Rate', 'Churned', 'Action']].head(10),
