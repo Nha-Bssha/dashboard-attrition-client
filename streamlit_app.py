@@ -700,53 +700,56 @@ def main():
     # Vérifier si les données filtrées sont vides
     is_valid_filtered, _ = DataValidator.validate_dataframe(df_filtered)
     
-    # Créer les onglets
+    # Créer les onglets - STRUCTURE 10/10
     tabs = st.tabs([
-        "📈 Vue d'ensemble",
-        "🔄 Comportement Churn",
-        "😊 Satisfaction",
-        "💰 Coût du Churn",
-        "🔥 Focus San Diego",
-        "🗺️ Géographie"
+        "📊 Vue d'ensemble",
+        "🎯 Zones critiques",
+        "🔍 Drivers du churn",
+        "💰 Impact financier",
+        "🚀 Plan d'action"
     ])
     
-    # Onglet 1: Vue d'ensemble
+    # Onglet 1: Vue d'ensemble (Quoi?)
     with tabs[0]:
         if not is_valid_filtered:
             UIComponents.show_empty_state()
         else:
             render_overview_tab(df_filtered)
     
-    # Onglet 2: Comportement
+    # Onglet 2: Zones critiques (Où?)
     with tabs[1]:
         if not is_valid_filtered:
             UIComponents.show_empty_state()
         else:
-            render_behavior_tab(df_filtered)
+            render_geography_tab(df_filtered)
     
-    # Onglet 3: Satisfaction
+    # Onglet 3: Drivers du churn (Pourquoi?)
     with tabs[2]:
         if not is_valid_filtered:
             UIComponents.show_empty_state()
         else:
-            render_satisfaction_tab(df_filtered)
+            # Sous-onglets pour séparer Comportement et Satisfaction
+            driver_subtabs = st.tabs(["📊 Comportement", "😊 Satisfaction"])
+            
+            with driver_subtabs[0]:
+                render_behavior_tab(df_filtered)
+            
+            with driver_subtabs[1]:
+                render_satisfaction_tab(df_filtered)
     
-    # Onglet 4: Coût
+    # Onglet 4: Impact financier (Combien?)
     with tabs[3]:
         if not is_valid_filtered:
             UIComponents.show_empty_state()
         else:
             render_cost_tab(df_filtered)
     
-    # Onglet 5: Focus San Diego
+    # Onglet 5: Plan d'action (Comment?)
     with tabs[4]:
         if not is_valid_filtered:
             UIComponents.show_empty_state()
         else:
-            render_sandiego_tab(df_filtered)
-    
-    # Onglet 6: Géographie
-    with tabs[5]:
+            render_action_plan_tab(df_filtered)
         if not is_valid_filtered:
             UIComponents.show_empty_state()
         else:
@@ -2461,14 +2464,179 @@ def render_mode3_visuals(df: pd.DataFrame, min_churned: int, groupby: str):
         st.error(f"Erreur Mode 3: {str(e)}")
 
 # ============================================================================
-# FONCTIONS DE CRÉATION DES CARTES PAR MODE
+# ONGLET PLAN D'ACTION
 # ============================================================================
 
-def render_sandiego_tab(df: pd.DataFrame):
-    """Onglet Focus San Diego"""
-    st.markdown('<h2 class="sub-title">🔥 Focus San Diego</h2>', 
+def render_action_plan_tab(df: pd.DataFrame):
+    """
+    Onglet 5: Plan d'action - Comment réduire le churn?
+    Synthèse recommandations priorisées avec roadmap
+    """
+    st.markdown('<h2 class="sub-title">🚀 Plan d\'action anti-churn</h2>', 
                 unsafe_allow_html=True)
-    st.info("🚧 En cours de développement...")
+    
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                padding: 20px; border-radius: 10px; margin-bottom: 30px;">
+        <h3 style="color: white; margin: 0;">💡 Objectif</h3>
+        <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+            Roadmap interventions priorisées par urgence et ROI pour réduire le churn de 26.5% à 20% en 90 jours
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Analyser les zones critiques
+    city_stats = df.groupby('City').agg({
+        'customerID': 'count',
+        'Churn': lambda x: (x == 'Yes').sum()
+    }).reset_index()
+    
+    city_stats.columns = ['City', 'Total_Customers', 'Churned']
+    city_stats['Retained'] = city_stats['Total_Customers'] - city_stats['Churned']
+    city_stats['Churn_Rate'] = safe_divide(city_stats['Churned'], city_stats['Total_Customers']) * 100
+    city_stats['Pertes'] = city_stats['Churned'] * 3500
+    
+    # Filtrer villes significatives
+    city_stats_significant = city_stats[city_stats['Total_Customers'] >= 50].copy()
+    
+    # Catégoriser selon urgence
+    def categorize_priority(row):
+        pertes = row['Pertes']
+        volume = row['Churned']
+        taux = row['Churn_Rate']
+        
+        if pertes >= 150000 or volume >= 50 or taux >= 30:
+            return '🚨 Urgence max', 1, 7
+        elif pertes >= 75000 or volume >= 25 or taux >= 25:
+            return '⚠️ Intervention', 2, 30
+        elif taux >= 20:
+            return '⚡ Surveillance', 3, 90
+        else:
+            return '✅ Acceptable', 4, 0
+    
+    city_stats_significant[['Priorité', 'Niveau', 'Délai_jours']] = city_stats_significant.apply(
+        lambda row: pd.Series(categorize_priority(row)), axis=1
+    )
+    
+    # Trier par niveau priorité puis pertes
+    city_stats_significant = city_stats_significant.sort_values(['Niveau', 'Pertes'], ascending=[True, False])
+    
+    # === ROADMAP VISUELLE ===
+    st.markdown("### 📅 Roadmap interventions")
+    
+    urgence_count = len(city_stats_significant[city_stats_significant['Niveau'] == 1])
+    intervention_count = len(city_stats_significant[city_stats_significant['Niveau'] == 2])
+    surveillance_count = len(city_stats_significant[city_stats_significant['Niveau'] == 3])
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, rgba(231, 76, 60, 0.2), rgba(192, 57, 43, 0.3));
+                    border-left: 5px solid #e74c3c; padding: 20px; border-radius: 8px;">
+            <div style="font-size: 32px; margin-bottom: 10px;">⏱️ 7 jours</div>
+            <div style="font-size: 18px; font-weight: bold; color: #e74c3c; margin-bottom: 10px;">
+                URGENCE MAXIMALE
+            </div>
+            <div style="font-size: 24px; font-weight: bold;">{urgence_count} ville(s)</div>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.2);">
+                Action: Plan immédiat
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, rgba(243, 156, 18, 0.2), rgba(211, 84, 0, 0.3));
+                    border-left: 5px solid #f39c12; padding: 20px; border-radius: 8px;">
+            <div style="font-size: 32px; margin-bottom: 10px;">📆 30 jours</div>
+            <div style="font-size: 18px; font-weight: bold; color: #f39c12; margin-bottom: 10px;">
+                INTERVENTION CIBLÉE
+            </div>
+            <div style="font-size: 24px; font-weight: bold;">{intervention_count} ville(s)</div>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.2);">
+                Action: Audit RCA
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, rgba(46, 204, 113, 0.15), rgba(39, 174, 96, 0.2));
+                    border-left: 5px solid #27ae60; padding: 20px; border-radius: 8px;">
+            <div style="font-size: 32px; margin-bottom: 10px;">📊 90 jours</div>
+            <div style="font-size: 18px; font-weight: bold; color: #27ae60; margin-bottom: 10px;">
+                SURVEILLANCE
+            </div>
+            <div style="font-size: 24px; font-weight: bold;">{surveillance_count} ville(s)</div>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.2);">
+                Action: Monitoring
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # === RECOMMANDATIONS DÉTAILLÉES ===
+    st.markdown("### 📋 Recommandations par priorité")
+    
+    for niveau in [1, 2, 3]:
+        villes_niveau = city_stats_significant[city_stats_significant['Niveau'] == niveau]
+        
+        if len(villes_niveau) > 0:
+            priorite_label = villes_niveau.iloc[0]['Priorité']
+            delai = villes_niveau.iloc[0]['Délai_jours']
+            
+            with st.expander(f"{priorite_label} - {len(villes_niveau)} ville(s) - Délai {delai}j", expanded=(niveau==1)):
+                
+                # Budget et ROI estimés
+                total_pertes = villes_niveau['Pertes'].sum()
+                total_churned = villes_niveau['Churned'].sum()
+                
+                if niveau == 1:
+                    budget = 30000
+                    retention_rate = 0.30
+                    couleur = "#e74c3c"
+                elif niveau == 2:
+                    budget = 10000
+                    retention_rate = 0.25
+                    couleur = "#f39c12"
+                else:
+                    budget = 3000
+                    retention_rate = 0.15
+                    couleur = "#27ae60"
+                
+                gain_potentiel = total_pertes * retention_rate
+                roi = gain_potentiel / budget if budget > 0 else 0
+                
+                col_a, col_b, col_c, col_d = st.columns(4)
+                col_a.metric("Impact total", f"${total_pertes:,.0f}")
+                col_b.metric("Clients churned", f"{total_churned}")
+                col_c.metric("Budget recommandé", f"${budget:,.0f}")
+                col_d.metric("ROI estimé", f"{roi:.1f}x")
+                
+                # Tableau des villes
+                st.dataframe(
+                    villes_niveau[['City', 'Churned', 'Churn_Rate', 'Pertes', 'Priorité']].rename(columns={
+                        'City': 'Ville',
+                        'Churned': 'Churned',
+                        'Churn_Rate': 'Taux (%)',
+                        'Pertes': 'Pertes ($)',
+                        'Priorité': 'Action'
+                    }),
+                    use_container_width=True,
+                    hide_index=True
+                )
+    
+    st.markdown("---")
+    
+    # === EXPORT RAPPORT PDF ===
+    st.markdown("### 📄 Rapport exécutif")
+    
+    st.markdown("""
+    💡 **Export disponible** : Téléchargez un rapport PDF complet avec toutes les recommandations
+    depuis l'onglet **Zones critiques** (Mode 2).
+    """)
 
 # ============================================================================
 # RUN APPLICATION
