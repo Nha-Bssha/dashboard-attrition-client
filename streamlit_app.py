@@ -1800,7 +1800,7 @@ def render_priority_matrix_visual(matrix_data: dict):
         st.markdown("""
         ### 📊 Critères de priorisation (alignés sur impact business)
         
-        La matrice classe chaque ville selon **3 dimensions** :
+        La matrice classe chaque ville selon **l'impact business réel** :
         
         #### 🔴 URGENCE ABSOLUE
         **Critères (logique OR - un seul suffit):**
@@ -1810,30 +1810,33 @@ def render_priority_matrix_visual(matrix_data: dict):
         
         **Action:** Plan d'action immédiat (7 jours) | Budget $15-30K | ROI 5x+
         
-        #### 🟠 INTERVENTION CIBLÉE
-        **Critères (logique AND - les deux requis):**
-        - Taux ≥ 27% (critique) **ET**
-        - Volume < 50 (modéré)
+        #### 🟠 INTERVENTION CIBLÉE  
+        **Critères (logique OR - un seul suffit):**
+        - Pertes ≥ $75,000/an **OU**
+        - Volume ≥ 25 churned **OU**
+        - Taux ≥ 25%
         
         **Action:** Investigation urgente (30 jours) | Budget $5-10K | ROI 3-5x
         
         #### 🟢 SURVEILLANCE
         **Critères:**
-        - Volume ≥ 30 (visible) **ET**
-        - Taux < 27% (acceptable)
+        - Taux ≥ 20% (préoccupant)
+        - MAIS ne valide aucun critère "Intervention"
         
         **Action:** Monitoring renforcé | Alertes automatiques | Coût minimal
         
         #### ⚪ NON SIGNIFICATIF
         **Critères:**
-        - Impact < $50K **ET**
-        - Volume < 30
+        - Taux < 20% (acceptable)
+        - ET Aucun impact business significatif
         
-        **Action:** Monitoring standard uniquement
+        **Action:** Monitoring standard uniquement  
+        **Note:** Toutes les villes affichées ont ≥50 clients (filtre significativité)
         
         ---
         
-        ✅ **Cohérence:** Cette logique est identique au tableau "Actions recommandées" (Mode 1)
+        ✅ **Cohérence:** Cette logique est **identique** au tableau "Actions recommandées" (Mode 1)  
+        💡 **Exemple:** San Jose (25.9%, 29 churned, $101K) → Ciblé car taux ≥25% ET pertes ≥$75K
         """)
     
     # Ligne 1: Urgence + Ciblé
@@ -1870,7 +1873,7 @@ def render_priority_matrix_visual(matrix_data: dict):
                     border: 3px solid #f39c12; padding: 20px; border-radius: 10px; min-height: 200px;">
             <h3 style="color: #f39c12; margin-bottom: 15px;">🟠 INTERVENTION CIBLÉE</h3>
             <p style="color: #bdc3c7; font-size: 13px; margin-bottom: 10px;">
-                Volume faible + Taux élevé → <strong>Audit RCA</strong>
+                Pertes ≥$75K OU Volume ≥25 OU Taux ≥25% → <strong>Audit RCA</strong>
             </p>
         """, unsafe_allow_html=True)
         
@@ -1898,7 +1901,7 @@ def render_priority_matrix_visual(matrix_data: dict):
                     border: 2px solid #27ae60; padding: 20px; border-radius: 10px; min-height: 150px;">
             <h3 style="color: #27ae60; margin-bottom: 15px;">🟢 SURVEILLANCE</h3>
             <p style="color: #bdc3c7; font-size: 13px; margin-bottom: 10px;">
-                Volume élevé + Taux acceptable → <strong>Watch list</strong>
+                Taux ≥20% mais impact modéré → <strong>Watch list</strong>
             </p>
         """, unsafe_allow_html=True)
         
@@ -1917,7 +1920,7 @@ def render_priority_matrix_visual(matrix_data: dict):
                     border: 2px solid #7f8c8d; padding: 20px; border-radius: 10px; min-height: 150px;">
             <h3 style="color: #95a5a6; margin-bottom: 15px;">⚪ NON SIGNIFICATIF</h3>
             <p style="color: #bdc3c7; font-size: 13px; margin-bottom: 10px;">
-                Volume faible + Taux acceptable → <strong>Bruit statistique</strong>
+                Taux <20% ET impact négligeable → <strong>Monitoring standard</strong>
             </p>
         """, unsafe_allow_html=True)
         
@@ -2179,6 +2182,10 @@ def render_mode2_visuals(df: pd.DataFrame, top_n: int, sort_by: str):
             
             **Q: Pourquoi la matrice dit "Urgence" pour certaines villes ?**  
             A: Critères (un seul suffit) : Pertes ≥$150K OU Volume ≥50 OU Taux ≥30%
+            
+            **Q: Pourquoi la matrice dit "Intervention ciblée" pour d'autres ?**  
+            A: Critères (un seul suffit) : Pertes ≥$75K OU Volume ≥25 OU Taux ≥25%  
+            Exemple: San Jose (25.9%, 29 churned, $101K) valide 2 critères (taux + pertes)
             
             **Q: Comment sont calculés les ROI ?**  
             A: (Récupération clients × $3,500 - Coût campagne) / Coût campagne  
