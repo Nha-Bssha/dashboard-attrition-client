@@ -2514,9 +2514,10 @@ def render_action_plan_tab(df: pd.DataFrame):
         else:
             return '✅ Acceptable', 4, 0
     
-    city_stats_significant[['Priorité', 'Niveau', 'Délai_jours']] = city_stats_significant.apply(
-        lambda row: pd.Series(categorize_priority(row)), axis=1
-    )
+    # Appliquer la catégorisation et créer les colonnes
+    priorities = city_stats_significant.apply(categorize_priority, axis=1, result_type='expand')
+    priorities.columns = ['Priorité', 'Niveau', 'Délai_jours']
+    city_stats_significant = pd.concat([city_stats_significant, priorities], axis=1)
     
     # Trier par niveau priorité puis pertes
     city_stats_significant = city_stats_significant.sort_values(['Niveau', 'Pertes'], ascending=[True, False])
