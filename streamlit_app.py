@@ -1752,23 +1752,29 @@ def create_priority_matrix(city_stats: pd.DataFrame):
     
     # Catégorisation EXPERTE basée impact business
     def categorize_matrix(row):
+        """
+        Catégorisation COHÉRENTE avec tableau Mode 1
+        Basée sur impact business réel (pertes $ + volume + taux)
+        """
         pertes = row['Pertes']
         volume = row['Churned']
         taux = row['Churn_Rate']
         
-        # URGENCE ABSOLUE: Impact majeur (logique OR)
+        # URGENCE ABSOLUE: Impact majeur (logique OR - un seul suffit)
         if pertes >= 150000 or volume >= 50 or taux >= 30:
             return '🔴 Urgence'
         
-        # INTERVENTION CIBLÉE: Taux critique mais volume modéré
-        elif taux >= 27 and volume < 50:
+        # INTERVENTION RAPIDE: Impact modéré-élevé (logique OR)
+        # Aligné avec logique tableau Mode 1
+        elif pertes >= 75000 or volume >= 25 or taux >= 25:
             return '🟠 Ciblé'
         
-        # SURVEILLANCE: Volume élevé mais taux acceptable
-        elif volume >= 30 and taux < 27:
+        # SURVEILLANCE: Impact faible mais surveillance nécessaire
+        elif taux >= 20:
             return '🟢 Watch'
         
-        # NON SIGNIFICATIF: Impact faible
+        # NON SIGNIFICATIF: Impact négligeable (vraiment du bruit)
+        # Réservé aux villes < 50 clients OU pertes < $50K ET taux < 20%
         else:
             return '⚪ Ignore'
     
