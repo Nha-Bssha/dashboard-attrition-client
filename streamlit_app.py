@@ -2485,19 +2485,34 @@ def render_action_plan_tab(df: pd.DataFrame):
     </div>
     """, unsafe_allow_html=True)
     
-    # Analyser les zones critiques
-    city_stats = df.groupby('City').agg({
-        'customerID': 'count',
-        'Churn': lambda x: (x == 'Yes').sum()
-    }).reset_index()
-    
-    city_stats.columns = ['City', 'Total_Customers', 'Churned']
-    city_stats['Retained'] = city_stats['Total_Customers'] - city_stats['Churned']
-    city_stats['Churn_Rate'] = safe_divide(city_stats['Churned'], city_stats['Total_Customers']) * 100
-    city_stats['Pertes'] = city_stats['Churned'] * 3500
-    
-    # Filtrer villes significatives
-    city_stats_significant = city_stats[city_stats['Total_Customers'] >= 50].copy()
+    # Analyser les zones critiques - Approche robuste
+    try:
+        # Créer colonne binaire churn
+        df_temp = df.copy()
+        df_temp['Is_Churned'] = (df_temp['Churn'] == 'Yes').astype(int)
+        
+        # Agrégation simple sans lambda
+        city_stats = df_temp.groupby('City', as_index=False).agg({
+            'customerID': 'count',
+            'Is_Churned': 'sum'
+        })
+        
+        city_stats.columns = ['City', 'Total_Customers', 'Churned']
+        city_stats['Retained'] = city_stats['Total_Customers'] - city_stats['Churned']
+        city_stats['Churn_Rate'] = safe_divide(city_stats['Churned'], city_stats['Total_Customers']) * 100
+        city_stats['Pertes'] = city_stats['Churned'] * 3500
+        
+        # Filtrer villes significatives
+        city_stats_significant = city_stats[city_stats['Total_Customers'] >= 50].copy()
+        
+        # Vérifier qu'il y a des données
+        if len(city_stats_significant) == 0:
+            st.warning("⚠️ Aucune ville avec ≥50 clients dans les données filtrées")
+            return
+            
+    except Exception as e:
+        st.error(f"❌ Erreur lors de l'analyse des zones: {str(e)}")
+        return
     
     # Catégoriser selon urgence
     def categorize_priority(row):
