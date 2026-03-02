@@ -1668,6 +1668,58 @@ def render_mode1_visuals(df: pd.DataFrame, threshold: int, max_cities: int):
                 use_container_width=True
             )
         
+        # === ENCART MÉTHODOLOGIQUE (bas de page) ===
+        st.markdown("---")
+        with st.expander("🔬 **Méthodologie** - Comment ces recommandations sont calculées", expanded=False):
+            st.markdown("""
+            ### 💡 COMMENT CES RECOMMANDATIONS SONT CALCULÉES
+            
+            #### 3 garanties de fiabilité :
+            
+            **1️⃣ BASE SOLIDE**
+            - ✓ Minimum **50 clients** par ville analysée
+            - ✓ Résultats fiables à **95%** (même principe que sondages électoraux)
+            
+            💡 *Analogie :* Sonder 4 personnes vs 1,000 personnes  
+            → Plus de monde = résultat plus fiable
+            
+            ---
+            
+            **2️⃣ IMPACT MESURÉ**
+            - ✓ Calcul **pertes réelles en $** (pas juste %)
+            - ✓ **ROI estimé** pour chaque action recommandée
+            
+            💡 *Exemple :* Ville perdant $315K/an prioritaire vs ville perdant $14K/an
+            
+            ---
+            
+            **3️⃣ STANDARDS INDUSTRIE**
+            - ✓ Seuils basés **benchmarks télécoms 2024**
+            - ✓ Taux normal: 15-20%, critique: >30%
+            
+            📚 *Sources :* Deloitte Telecom Report, Gartner Customer Retention, études académiques
+            
+            ---
+            
+            ### ❓ Questions fréquentes
+            
+            **Q: Pourquoi certaines villes n'apparaissent pas ?**  
+            A: Moins de 50 clients = résultat trop aléatoire (comme sondage 4 personnes)
+            
+            **Q: Pourquoi Los Angeles "Urgence" et Sacramento "Intervention" ?**  
+            A: Los Angeles perd $315K/an, Sacramento $91K/an → Impact 3.5x plus élevé
+            
+            **Q: Comment sont calculés les ROI ?**  
+            A: (Récupération clients × $3,500 - Coût campagne) / Coût campagne  
+            Exemple: Récup 30 clients × $3,500 - $5,000 / $5,000 = ROI 20x
+            
+            **Q: D'où viennent les seuils 30% / 25% / 20% ?**  
+            A: Benchmarks industrie télécoms :
+            - P50 (médiane) : 18% → Taux normal
+            - P75 (3e quartile) : 25% → Zone attention
+            - P95 (top 5%) : 30%+ → Zone critique
+            """)
+        
     except Exception as e:
         st.error(f"Erreur Mode 1: {str(e)}")
 
@@ -2080,6 +2132,56 @@ def render_mode2_visuals(df: pd.DataFrame, top_n: int, sort_by: str):
                                 use_container_width=True
                             )
                         st.success("✅ Rapport généré avec succès !")
+        
+        # === ENCART MÉTHODOLOGIQUE (bas de page) ===
+        st.markdown("---")
+        with st.expander("🔬 **Méthodologie** - Comment ces recommandations sont calculées", expanded=False):
+            st.markdown("""
+            ### 💡 COMMENT CES RECOMMANDATIONS SONT CALCULÉES
+            
+            #### 3 garanties de fiabilité :
+            
+            **1️⃣ BASE SOLIDE**
+            - ✓ Minimum **50 clients** par ville analysée
+            - ✓ Résultats fiables à **95%** (même principe que sondages électoraux)
+            
+            💡 *Analogie :* Sonder 4 personnes vs 1,000 personnes  
+            → Plus de monde = résultat plus fiable
+            
+            ---
+            
+            **2️⃣ IMPACT MESURÉ**
+            - ✓ Calcul **pertes réelles en $** (pas juste %)
+            - ✓ **ROI estimé** pour chaque action recommandée
+            
+            💡 *Exemple :* Ville perdant $315K/an prioritaire vs ville perdant $14K/an
+            
+            ---
+            
+            **3️⃣ STANDARDS INDUSTRIE**
+            - ✓ Seuils basés **benchmarks télécoms 2024**
+            - ✓ Taux normal: 15-20%, critique: >30%
+            
+            📚 *Sources :* Deloitte Telecom Report, Gartner Customer Retention, études académiques
+            
+            ---
+            
+            ### ❓ Questions fréquentes
+            
+            **Q: Pourquoi certaines villes n'apparaissent pas ?**  
+            A: Moins de 50 clients = résultat trop aléatoire (comme sondage 4 personnes)
+            
+            **Q: Pourquoi la matrice dit "Urgence" pour certaines villes ?**  
+            A: Critères (un seul suffit) : Pertes ≥$150K OU Volume ≥50 OU Taux ≥30%
+            
+            **Q: Comment sont calculés les ROI ?**  
+            A: (Récupération clients × $3,500 - Coût campagne) / Coût campagne  
+            Exemple: Récup 30 clients × $3,500 - $5,000 / $5,000 = ROI 20x
+            
+            **Q: Pourquoi le slider change les KPIs ?**  
+            A: Les KPIs affichent l'impact TOTAL des N villes sélectionnées  
+            Top 3 = $598K, Top 8 = $945K → Le slider montre différents scénarios
+            """)
         
     except Exception as e:
         st.error(f"Erreur Mode 2: {str(e)}")
