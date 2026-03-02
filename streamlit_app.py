@@ -523,6 +523,20 @@ def load_data() -> pd.DataFrame:
 def create_calculated_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Créer les colonnes calculées nécessaires"""
     try:
+        # CRITIQUE: Créer colonne 'Churn' à partir de 'Churn Label'
+        if 'Churn' not in df.columns:
+            if 'Churn Label' in df.columns:
+                df['Churn'] = df['Churn Label']
+            elif 'Customer Status' in df.columns:
+                df['Churn'] = df['Customer Status'].map({'Churned': 'Yes', 'Stayed': 'No'})
+            else:
+                # Fallback
+                df['Churn'] = 'No'
+        
+        # CRITIQUE: Normaliser customerID (certaines fonctions utilisent lowercase)
+        if 'CustomerID' in df.columns and 'customerID' not in df.columns:
+            df['customerID'] = df['CustomerID']
+        
         # Calculer nombre de produits souscrits
         product_cols = ['Phone Service', 'Multiple Lines', 'Internet Service', 
                        'Online Security', 'Online Backup', 'Device Protection',
@@ -750,10 +764,6 @@ def main():
             UIComponents.show_empty_state()
         else:
             render_action_plan_tab(df_filtered)
-        if not is_valid_filtered:
-            UIComponents.show_empty_state()
-        else:
-            render_geography_tab(df_filtered)
 
 # ============================================================================
 # GRAPHIQUES - ONGLET VUE D'ENSEMBLE
