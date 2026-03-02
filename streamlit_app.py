@@ -2474,99 +2474,98 @@ def render_mode3_visuals(df: pd.DataFrame, min_churned: int, groupby: str):
         st.error(f"Erreur Mode 3: {str(e)}")
 
 # ============================================================================
-# ONGLET PLAN D'ACTION
+# ONGLET PLAN D'ACTION - VERSION CONSOLIDÉE GLOBALE
 # ============================================================================
 
 def render_action_plan_tab(df: pd.DataFrame):
     """
-    Onglet 5: Plan d'action - Comment réduire le churn?
-    Synthèse recommandations priorisées avec roadmap
+    Onglet 5: Plan d'action GLOBAL - Synthèse multi-dimensionnelle
+    Roadmap consolidée + Recommandations GEO + COMPORTEMENT + SATISFACTION + FINANCE
     """
-    st.markdown('<h2 class="sub-title">🚀 Plan d\'action anti-churn</h2>', 
+    st.markdown('<h2 class="sub-title">🚀 Plan d\'action anti-churn global</h2>', 
                 unsafe_allow_html=True)
     
     st.markdown("""
     <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                 padding: 20px; border-radius: 10px; margin-bottom: 30px;">
-        <h3 style="color: white; margin: 0;">💡 Objectif</h3>
+        <h3 style="color: white; margin: 0;">💡 Objectif stratégique</h3>
         <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
-            Roadmap interventions priorisées par urgence et ROI pour réduire le churn de 26.5% à 20% en 90 jours
+            Roadmap consolidée TOUTES dimensions pour réduire le churn de <strong>26.5% à 20%</strong> en 90 jours
         </p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Analyser les zones critiques - Approche robuste
+    # ========== ANALYSES PAR DIMENSION ==========
     try:
-        # Créer colonne binaire churn
         df_temp = df.copy()
         df_temp['Is_Churned'] = (df_temp['Churn'] == 'Yes').astype(int)
         
-        # Agrégation simple sans lambda
+        # 1. ANALYSE GÉOGRAPHIQUE
         city_stats = df_temp.groupby('City', as_index=False).agg({
             'customerID': 'count',
             'Is_Churned': 'sum'
         })
-        
-        city_stats.columns = ['City', 'Total_Customers', 'Churned']
-        city_stats['Retained'] = city_stats['Total_Customers'] - city_stats['Churned']
-        city_stats['Churn_Rate'] = safe_divide(city_stats['Churned'], city_stats['Total_Customers']) * 100
+        city_stats.columns = ['City', 'Total', 'Churned']
         city_stats['Pertes'] = city_stats['Churned'] * 3500
+        city_stats = city_stats[city_stats['Total'] >= 50].sort_values('Pertes', ascending=False)
         
-        # Filtrer villes significatives
-        city_stats_significant = city_stats[city_stats['Total_Customers'] >= 50].copy()
+        top3_cities = city_stats.head(3)
         
-        # Vérifier qu'il y a des données
-        if len(city_stats_significant) == 0:
-            st.warning("⚠️ Aucune ville avec ≥50 clients dans les données filtrées")
-            return
+        # 2. ANALYSE COMPORTEMENTALE
+        if 'Contract' in df.columns:
+            contract_churn = df.groupby('Contract')['Churn'].apply(lambda x: (x=='Yes').sum() / len(x) * 100).sort_values(ascending=False)
+            top_contract = contract_churn.index[0] if len(contract_churn) > 0 else "Month-to-month"
+            top_contract_rate = contract_churn.iloc[0] if len(contract_churn) > 0 else 42
+        else:
+            top_contract = "Month-to-month"
+            top_contract_rate = 42
             
+        if 'Internet Service' in df.columns:
+            internet_churn = df.groupby('Internet Service')['Churn'].apply(lambda x: (x=='Yes').sum() / len(x) * 100).sort_values(ascending=False)
+            top_internet = internet_churn.index[0] if len(internet_churn) > 0 else "Fiber optic"
+            top_internet_rate = internet_churn.iloc[0] if len(internet_churn) > 0 else 42
+        else:
+            top_internet = "Fiber optic"
+            top_internet_rate = 42
+            
+        # 3. ANALYSE SATISFACTION
+        if 'Tech Support' in df.columns:
+            support_churn = df.groupby('Tech Support')['Churn'].apply(lambda x: (x=='Yes').sum() / len(x) * 100).sort_values(ascending=False)
+            worst_support = support_churn.index[0] if len(support_churn) > 0 else "No"
+            worst_support_rate = support_churn.iloc[0] if len(support_churn) > 0 else 41
+        else:
+            worst_support = "No"
+            worst_support_rate = 41
+            
+        # 4. CALCULS FINANCIERS GLOBAUX
+        total_churned = df_temp['Is_Churned'].sum()
+        total_customers = len(df_temp)
+        churn_rate_global = (total_churned / total_customers * 100) if total_customers > 0 else 0
+        total_pertes = total_churned * 3500
+        
     except Exception as e:
-        st.error(f"❌ Erreur lors de l'analyse des zones: {str(e)}")
+        st.error(f"❌ Erreur analyse: {str(e)}")
         return
     
-    # Catégoriser selon urgence
-    def categorize_priority(row):
-        pertes = row['Pertes']
-        volume = row['Churned']
-        taux = row['Churn_Rate']
-        
-        if pertes >= 150000 or volume >= 50 or taux >= 30:
-            return '🚨 Urgence max', 1, 7
-        elif pertes >= 75000 or volume >= 25 or taux >= 25:
-            return '⚠️ Intervention', 2, 30
-        elif taux >= 20:
-            return '⚡ Surveillance', 3, 90
-        else:
-            return '✅ Acceptable', 4, 0
-    
-    # Appliquer la catégorisation et créer les colonnes
-    priorities = city_stats_significant.apply(categorize_priority, axis=1, result_type='expand')
-    priorities.columns = ['Priorité', 'Niveau', 'Délai_jours']
-    city_stats_significant = pd.concat([city_stats_significant, priorities], axis=1)
-    
-    # Trier par niveau priorité puis pertes
-    city_stats_significant = city_stats_significant.sort_values(['Niveau', 'Pertes'], ascending=[True, False])
-    
-    # === ROADMAP VISUELLE ===
-    st.markdown("### 📅 Roadmap interventions")
-    
-    urgence_count = len(city_stats_significant[city_stats_significant['Niveau'] == 1])
-    intervention_count = len(city_stats_significant[city_stats_significant['Niveau'] == 2])
-    surveillance_count = len(city_stats_significant[city_stats_significant['Niveau'] == 3])
+    # ========== 1. ROADMAP INTERVENTIONS ==========
+    st.markdown("### 📅 Roadmap interventions prioritaires")
     
     col1, col2, col3 = st.columns(3)
     
     with col1:
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, rgba(231, 76, 60, 0.2), rgba(192, 57, 43, 0.3));
-                    border-left: 5px solid #e74c3c; padding: 20px; border-radius: 8px;">
+                    border-left: 5px solid #e74c3c; padding: 20px; border-radius: 8px; min-height: 200px;">
             <div style="font-size: 32px; margin-bottom: 10px;">⏱️ 7 jours</div>
             <div style="font-size: 18px; font-weight: bold; color: #e74c3c; margin-bottom: 10px;">
                 URGENCE MAXIMALE
             </div>
-            <div style="font-size: 24px; font-weight: bold;">{urgence_count} ville(s)</div>
-            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.2);">
-                Action: Plan immédiat
+            <div style="font-size: 24px; font-weight: bold; margin-bottom: 15px;">Phase 1</div>
+            <div style="font-size: 14px; line-height: 1.6;">
+                • Top 2 villes critiques<br>
+                • Clients sans tech support<br>
+                • Month-to-month à risque<br>
+                <strong style="color: #e74c3c;">Budget: $30K</strong>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -2574,14 +2573,17 @@ def render_action_plan_tab(df: pd.DataFrame):
     with col2:
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, rgba(243, 156, 18, 0.2), rgba(211, 84, 0, 0.3));
-                    border-left: 5px solid #f39c12; padding: 20px; border-radius: 8px;">
+                    border-left: 5px solid #f39c12; padding: 20px; border-radius: 8px; min-height: 200px;">
             <div style="font-size: 32px; margin-bottom: 10px;">📆 30 jours</div>
             <div style="font-size: 18px; font-weight: bold; color: #f39c12; margin-bottom: 10px;">
                 INTERVENTION CIBLÉE
             </div>
-            <div style="font-size: 24px; font-weight: bold;">{intervention_count} ville(s)</div>
-            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.2);">
-                Action: Audit RCA
+            <div style="font-size: 24px; font-weight: bold; margin-bottom: 15px;">Phase 2</div>
+            <div style="font-size: 14px; line-height: 1.6;">
+                • 6 villes secondaires<br>
+                • Programme satisfaction<br>
+                • Offres contrats longs<br>
+                <strong style="color: #f39c12;">Budget: $15K</strong>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -2589,80 +2591,266 @@ def render_action_plan_tab(df: pd.DataFrame):
     with col3:
         st.markdown(f"""
         <div style="background: linear-gradient(135deg, rgba(46, 204, 113, 0.15), rgba(39, 174, 96, 0.2));
-                    border-left: 5px solid #27ae60; padding: 20px; border-radius: 8px;">
+                    border-left: 5px solid #27ae60; padding: 20px; border-radius: 8px; min-height: 200px;">
             <div style="font-size: 32px; margin-bottom: 10px;">📊 90 jours</div>
             <div style="font-size: 18px; font-weight: bold; color: #27ae60; margin-bottom: 10px;">
                 SURVEILLANCE
             </div>
-            <div style="font-size: 24px; font-weight: bold;">{surveillance_count} ville(s)</div>
-            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.2);">
-                Action: Monitoring
+            <div style="font-size: 24px; font-weight: bold; margin-bottom: 15px;">Phase 3</div>
+            <div style="font-size: 14px; line-height: 1.6;">
+                • Monitoring continu<br>
+                • Optimisation services<br>
+                • Mesure impact<br>
+                <strong style="color: #27ae60;">Budget: $5K</strong>
             </div>
         </div>
         """, unsafe_allow_html=True)
     
     st.markdown("---")
     
-    # === RECOMMANDATIONS DÉTAILLÉES ===
-    st.markdown("### 📋 Recommandations par priorité")
+    # ========== 2. RECOMMANDATIONS PAR LEVIER ==========
+    st.markdown("### 🎯 Recommandations par levier d'action")
     
-    for niveau in [1, 2, 3]:
-        villes_niveau = city_stats_significant[city_stats_significant['Niveau'] == niveau]
+    col_a, col_b, col_c = st.columns(3)
+    
+    with col_a:
+        st.markdown("""
+        <div style="background: rgba(231, 76, 60, 0.1); padding: 20px; border-radius: 10px; border-left: 4px solid #e74c3c;">
+            <h4 style="color: #e74c3c; margin-top: 0;">📍 Levier Géographique</h4>
+        """, unsafe_allow_html=True)
         
-        if len(villes_niveau) > 0:
-            priorite_label = villes_niveau.iloc[0]['Priorité']
-            delai = villes_niveau.iloc[0]['Délai_jours']
-            
-            with st.expander(f"{priorite_label} - {len(villes_niveau)} ville(s) - Délai {delai}j", expanded=(niveau==1)):
-                
-                # Budget et ROI estimés
-                total_pertes = villes_niveau['Pertes'].sum()
-                total_churned = villes_niveau['Churned'].sum()
-                
-                if niveau == 1:
-                    budget = 30000
-                    retention_rate = 0.30
-                    couleur = "#e74c3c"
-                elif niveau == 2:
-                    budget = 10000
-                    retention_rate = 0.25
-                    couleur = "#f39c12"
-                else:
-                    budget = 3000
-                    retention_rate = 0.15
-                    couleur = "#27ae60"
-                
-                gain_potentiel = total_pertes * retention_rate
-                roi = gain_potentiel / budget if budget > 0 else 0
-                
-                col_a, col_b, col_c, col_d = st.columns(4)
-                col_a.metric("Impact total", f"${total_pertes:,.0f}")
-                col_b.metric("Clients churned", f"{total_churned}")
-                col_c.metric("Budget recommandé", f"${budget:,.0f}")
-                col_d.metric("ROI estimé", f"{roi:.1f}x")
-                
-                # Tableau des villes
-                st.dataframe(
-                    villes_niveau[['City', 'Churned', 'Churn_Rate', 'Pertes', 'Priorité']].rename(columns={
-                        'City': 'Ville',
-                        'Churned': 'Churned',
-                        'Churn_Rate': 'Taux (%)',
-                        'Pertes': 'Pertes ($)',
-                        'Priorité': 'Action'
-                    }),
-                    use_container_width=True,
-                    hide_index=True
-                )
+        if len(top3_cities) > 0:
+            for _, city in top3_cities.iterrows():
+                st.markdown(f"**{city['City']}** : ${city['Pertes']:,.0f} impact")
+        
+        st.markdown("""
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(231, 76, 60, 0.3);">
+            <strong>💡 Actions:</strong><br>
+            • Campagnes ciblées 3 villes<br>
+            • Offres locales personnalisées<br>
+            • Support dédié zones critiques
+        </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col_b:
+        st.markdown(f"""
+        <div style="background: rgba(243, 156, 18, 0.1); padding: 20px; border-radius: 10px; border-left: 4px solid #f39c12;">
+            <h4 style="color: #f39c12; margin-top: 0;">📊 Levier Comportemental</h4>
+            <div style="margin: 10px 0;">
+                <strong>{top_contract}</strong> : {top_contract_rate:.1f}% churn<br>
+                <strong>{top_internet}</strong> : {top_internet_rate:.1f}% churn
+            </div>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(243, 156, 18, 0.3);">
+                <strong>💡 Actions:</strong><br>
+                • Inciter contrats 1-2 ans<br>
+                • Améliorer qualité Fiber<br>
+                • Bundles services attractifs
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col_c:
+        st.markdown(f"""
+        <div style="background: rgba(46, 204, 113, 0.1); padding: 20px; border-radius: 10px; border-left: 4px solid #27ae60;">
+            <h4 style="color: #27ae60; margin-top: 0;">😊 Levier Satisfaction</h4>
+            <div style="margin: 10px 0;">
+                <strong>Tech Support {worst_support}</strong> : {worst_support_rate:.1f}% churn
+            </div>
+            <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(46, 204, 113, 0.3);">
+                <strong>💡 Actions:</strong><br>
+                • Programme satisfaction<br>
+                • Tech support gratuit 3 mois<br>
+                • Formation clients services
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     
     st.markdown("---")
     
-    # === EXPORT RAPPORT PDF ===
-    st.markdown("### 📄 Rapport exécutif")
+    # ========== 3. BUDGET & ROI GLOBAL ==========
+    st.markdown("### 💰 Budget & ROI global consolidé")
+    
+    budget_urgence = 30000
+    budget_intervention = 15000
+    budget_surveillance = 5000
+    budget_total = budget_urgence + budget_intervention + budget_surveillance
+    
+    gain_potentiel = total_pertes * 0.30  # 30% retention
+    roi_global = gain_potentiel / budget_total if budget_total > 0 else 0
+    
+    col_x, col_y, col_z, col_w = st.columns(4)
+    
+    col_x.metric(
+        "💵 Budget total",
+        f"${budget_total:,}",
+        help="Investissement campagnes 90 jours"
+    )
+    
+    col_y.metric(
+        "📉 Pertes actuelles",
+        f"${total_pertes:,.0f}",
+        help=f"{total_churned} clients × $3,500 CLTV"
+    )
+    
+    col_z.metric(
+        "💰 Gain potentiel",
+        f"${gain_potentiel:,.0f}",
+        delta="30% retention",
+        help="Récupération clients × CLTV"
+    )
+    
+    col_w.metric(
+        "📈 ROI global",
+        f"{roi_global:.1f}x",
+        delta=f"+{(roi_global-1)*100:.0f}%",
+        help="Gain / Investissement"
+    )
+    
+    # Graphique allocation budget
+    st.markdown("#### 📊 Allocation budget par phase")
+    
+    budget_data = pd.DataFrame({
+        'Phase': ['Phase 1\n(7j)', 'Phase 2\n(30j)', 'Phase 3\n(90j)'],
+        'Budget': [budget_urgence, budget_intervention, budget_surveillance],
+        'Couleur': ['#e74c3c', '#f39c12', '#27ae60']
+    })
+    
+    fig_budget = go.Figure(data=[
+        go.Bar(
+            x=budget_data['Phase'],
+            y=budget_data['Budget'],
+            marker_color=budget_data['Couleur'],
+            text=[f"${b:,.0f}" for b in budget_data['Budget']],
+            textposition='auto',
+        )
+    ])
+    
+    fig_budget.update_layout(
+        title="Répartition budgétaire",
+        xaxis_title="",
+        yaxis_title="Budget ($)",
+        height=300,
+        template="plotly_dark",
+        showlegend=False
+    )
+    
+    st.plotly_chart(fig_budget, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # ========== 4. MATRICE PRIORISATION GLOBALE ==========
+    st.markdown("### 🎯 Matrice de priorisation multi-dimensionnelle")
     
     st.markdown("""
-    💡 **Export disponible** : Téléchargez un rapport PDF complet avec toutes les recommandations
-    depuis l'onglet **Zones critiques** (Mode 2).
-    """)
+    <div style="background: rgba(102, 126, 234, 0.1); padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+        <strong>💡 Lecture :</strong> Actions classées par <strong>urgence × impact</strong> sur TOUTES les dimensions (pas seulement géo)
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Créer matrice consolidée
+    actions_data = []
+    
+    # Actions GEO
+    if len(top3_cities) >= 2:
+        actions_data.append({
+            'Action': f"Campagne {top3_cities.iloc[0]['City']}",
+            'Dimension': '📍 Géographique',
+            'Impact': top3_cities.iloc[0]['Pertes'],
+            'Urgence': 'Maximale',
+            'Délai': '7j',
+            'Priorité': 1
+        })
+        actions_data.append({
+            'Action': f"Campagne {top3_cities.iloc[1]['City']}",
+            'Dimension': '📍 Géographique',
+            'Impact': top3_cities.iloc[1]['Pertes'],
+            'Urgence': 'Maximale',
+            'Délai': '7j',
+            'Priorité': 1
+        })
+    
+    # Actions COMPORTEMENT
+    actions_data.append({
+        'Action': f"Offres contrats longs (réduire {top_contract})",
+        'Dimension': '📊 Comportemental',
+        'Impact': total_pertes * 0.25,  # Estimation 25% impact
+        'Urgence': 'Élevée',
+        'Délai': '30j',
+        'Priorité': 2
+    })
+    
+    # Actions SATISFACTION
+    actions_data.append({
+        'Action': f"Tech Support gratuit 3 mois",
+        'Dimension': '😊 Satisfaction',
+        'Impact': total_pertes * 0.20,  # Estimation 20% impact
+        'Urgence': 'Élevée',
+        'Délai': '30j',
+        'Priorité': 2
+    })
+    
+    # Actions FINANCE
+    actions_data.append({
+        'Action': "Bundles -15% clients fidèles",
+        'Dimension': '💰 Financier',
+        'Impact': total_pertes * 0.15,
+        'Urgence': 'Modérée',
+        'Délai': '90j',
+        'Priorité': 3
+    })
+    
+    df_actions = pd.DataFrame(actions_data)
+    df_actions = df_actions.sort_values(['Priorité', 'Impact'], ascending=[True, False])
+    
+    # Afficher tableau avec style
+    st.dataframe(
+        df_actions[['Action', 'Dimension', 'Impact', 'Urgence', 'Délai']].rename(columns={
+            'Impact': 'Impact ($)'
+        }).style.format({'Impact ($)': '${:,.0f}'}),
+        use_container_width=True,
+        hide_index=True
+    )
+    
+    st.markdown("---")
+    
+    # ========== 5. EXPORTS MULTIPLES ==========
+    st.markdown("### 📄 Exports disponibles")
+    
+    col_export1, col_export2 = st.columns(2)
+    
+    with col_export1:
+        st.markdown("""
+        <div style="background: rgba(102, 126, 234, 0.1); padding: 20px; border-radius: 10px; border: 2px solid #667eea;">
+            <h4 style="color: #667eea; margin-top: 0;">📄 Rapport Exécutif Global</h4>
+            <p style="margin: 10px 0;">
+                Synthèse consolidée TOUTES dimensions :<br>
+                • Roadmap 90 jours<br>
+                • Budget & ROI global<br>
+                • Top actions priorisées<br>
+                • KPIs suivi
+            </p>
+            <p style="color: #95a5a6; font-size: 13px; margin: 15px 0 0 0;">
+                🚧 Disponible prochainement
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col_export2:
+        st.markdown("""
+        <div style="background: rgba(231, 76, 60, 0.1); padding: 20px; border-radius: 10px; border: 2px solid #e74c3c;">
+            <h4 style="color: #e74c3c; margin-top: 0;">📄 Rapport Zones Critiques</h4>
+            <p style="margin: 10px 0;">
+                Focus géographique détaillé :<br>
+                • Analyse par ville<br>
+                • Matrice priorisation géo<br>
+                • Plans action locaux
+            </p>
+            <p style="color: #27ae60; font-size: 13px; margin: 15px 0 0 0;">
+                ✅ Disponible dans onglet "Zones critiques" (Mode 2)
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
 # ============================================================================
 # RUN APPLICATION
