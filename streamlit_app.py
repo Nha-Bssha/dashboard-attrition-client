@@ -1504,64 +1504,75 @@ def render_cost_tab(df: pd.DataFrame):
                 hide_index=True
             )
         
-        # Graphique Sunburst hiérarchique
+        # Graphique hiérarchique des pertes
         st.markdown("#### 🎯 Répartition hiérarchique des pertes")
         
-        try:
-            # Créer données pour sunburst - Structure simplifiée
-            sunburst_labels = []
-            sunburst_parents = []
-            sunburst_values = []
-            
-            # Root
-            sunburst_labels.append('Total Pertes')
-            sunburst_parents.append('')
-            sunburst_values.append(pertes_totales)
-            
-            # Dimensions
-            for dim in dimensions_data:
-                # Dimension level
-                sunburst_labels.append(dim['Dimension'])
-                sunburst_parents.append('Total Pertes')
-                sunburst_values.append(dim['Pertes'])
+        # DEBUG: Vérifier données disponibles
+        if not dimensions_data or len(dimensions_data) == 0:
+            st.warning("⚠️ Aucune donnée disponible pour la visualisation hiérarchique")
+        else:
+            # Alternative: Bar Chart empilé (plus fiable que Sunburst)
+            try:
+                # Créer données pour graphique empilé
+                fig_decomp = go.Figure()
                 
-                # Segment level
-                sunburst_labels.append(f"{dim['Top_Segment']}")
-                sunburst_parents.append(dim['Dimension'])
-                sunburst_values.append(dim['Pertes'])
-            
-            # Créer figure
-            fig_sunburst = go.Figure(go.Sunburst(
-                labels=sunburst_labels,
-                parents=sunburst_parents,
-                values=sunburst_values,
-                branchvalues="total",
-                marker=dict(
-                    colorscale='RdYlGn_r'
-                ),
-                textinfo="label+percent entry",
-                hovertemplate='<b>%{label}</b><br>Pertes: $%{value:,.0f}<br>Part: %{percentEntry}<extra></extra>'
-            ))
-            
-            fig_sunburst.update_layout(
-                title="Décomposition hiérarchique des pertes ($)",
-                height=500,
-                template="plotly_dark",
-                margin=dict(t=50, b=10, l=10, r=10)
-            )
-            
-            st.plotly_chart(fig_sunburst, use_container_width=True)
-            
-        except Exception as e:
-            st.error(f"❌ Erreur affichage Sunburst: {str(e)}")
-            # Fallback: Afficher tableau à la place
-            st.markdown("**📊 Répartition des pertes (tableau alternatif):**")
-            if dimensions_data:
-                df_alt = pd.DataFrame(dimensions_data)
+                colors = ['#e74c3c', '#f39c12', '#3498db', '#9b59b6', '#1abc9c']
+                
+                for i, dim in enumerate(dimensions_data):
+                    fig_decomp.add_trace(go.Bar(
+                        name=f"{dim['Dimension']}<br>{dim['Top_Segment']}",
+                        x=['Pertes Totales'],
+                        y=[dim['Pertes']],
+                        text=f"${dim['Pertes']:,.0f}<br>{dim['Dimension']}<br>{dim['Top_Segment']}",
+                        textposition='inside',
+                        marker_color=colors[i % len(colors)],
+                        hovertemplate=f"<b>{dim['Dimension']}</b><br>" +
+                                    f"{dim['Top_Segment']}<br>" +
+                                    f"Pertes: ${dim['Pertes']:,.0f}<br>" +
+                                    f"Clients: {dim['Clients']:,.0f}<br>" +
+                                    f"Part: {dim['Pertes']/pertes_totales*100:.1f}%<extra></extra>"
+                    ))
+                
+                fig_decomp.update_layout(
+                    title=f"Décomposition des pertes totales (${pertes_totales:,.0f})",
+                    barmode='stack',
+                    showlegend=True,
+                    legend=dict(
+                        orientation="h",
+                        yanchor="bottom",
+                        y=1.02,
+                        xanchor="right",
+                        x=1
+                    ),
+                    height=400,
+                    template="plotly_dark",
+                    xaxis_title="",
+                    yaxis_title="Pertes ($)",
+                    hovermode='closest'
+                )
+                
+                st.plotly_chart(fig_decomp, use_container_width=True)
+                
+                # Info complémentaire
+                st.info(f"""
+                💡 **Lecture du graphique :** Le graphique empilé montre la contribution de chaque dimension 
+                aux pertes totales de ${pertes_totales:,.0f}. Chaque segment représente le top contributeur 
+                de sa dimension.
+                """)
+                
+            except Exception as e:
+                st.error(f"❌ Erreur affichage graphique: {str(e)}")
+                
+                # Fallback: Tableau détaillé
+                st.markdown("**📊 Tableau de décomposition:**")
+                df_fallback = pd.DataFrame(dimensions_data)
+                df_fallback['% du Total'] = (df_fallback['Pertes'] / pertes_totales * 100)
+                
                 st.dataframe(
-                    df_alt[['Dimension', 'Top_Segment', 'Pertes', 'Clients']].style.format({
+                    df_fallback[['Dimension', 'Top_Segment', 'Pertes', 'Clients', '% du Total']].style.format({
                         'Pertes': '${:,.0f}',
-                        'Clients': '{:,.0f}'
+                        'Clients': '{:,.0f}',
+                        '% du Total': '{:.1f}%'
                     }),
                     use_container_width=True,
                     hide_index=True
