@@ -1378,22 +1378,31 @@ def render_cost_tab(df: pd.DataFrame):
         total_retained = total_customers - total_churned
         churn_rate = (total_churned / total_customers * 100) if total_customers > 0 else 0
         
-        # CLTV : Utiliser constante 3500 pour cohérence totale dashboard
-        CLTV_REFERENCE = 3500  # Constante cohérente partout
-        
+        # CLTV : UTILISER DONNÉES RÉELLES DU DATASET (pas benchmark)
         if 'CLTV' in df_temp.columns:
-            cltv_dataset_moyen = df_temp['CLTV'].mean()
-            cltv_churned = df_temp[df_temp['Is_Churned']==1]['CLTV'].mean()
-            cltv_retained = df_temp[df_temp['Is_Churned']==0]['CLTV'].mean()
+            # Utiliser CLTV moyen des clients CHURNED (données réelles)
+            cltv_churned_real = df_temp[df_temp['Is_Churned']==1]['CLTV'].mean()
+            cltv_retained_real = df_temp[df_temp['Is_Churned']==0]['CLTV'].mean()
+            cltv_global_real = df_temp['CLTV'].mean()
+            
+            # CLTV_REFERENCE = CLTV réel churned (source de vérité)
+            CLTV_REFERENCE = int(cltv_churned_real)
+            
+            cltv_churned = cltv_churned_real
+            cltv_retained = cltv_retained_real
+            cltv_dataset_moyen = cltv_global_real
         else:
-            cltv_dataset_moyen = CLTV_REFERENCE
+            # Fallback si colonne CLTV absente (ne devrait pas arriver)
+            CLTV_REFERENCE = 3500
             cltv_churned = CLTV_REFERENCE
             cltv_retained = CLTV_REFERENCE
+            cltv_dataset_moyen = CLTV_REFERENCE
+            st.warning("⚠️ Colonne CLTV non trouvée - Utilisation valeur fallback $3,500")
         
-        # Utiliser CLTV_REFERENCE pour tous les calculs (cohérence)
+        # Utiliser CLTV_REFERENCE (données réelles) pour tous les calculs
         cltv_moyen = CLTV_REFERENCE
         
-        # Pertes totales
+        # Pertes totales (DONNÉES RÉELLES)
         pertes_totales = total_churned * CLTV_REFERENCE
         impact_annuel = pertes_totales  # Pertes sur la période
         
@@ -1661,10 +1670,10 @@ def render_cost_tab(df: pd.DataFrame):
             **📌 Note importante :**
             - **Total identique** dans les 3 Treemaps : ${:,.0f}
             - **Somme des % = 100%** dans chaque Treemap (garanti)
-            - **Pas de double comptage** : Chaque client churned compte pour $3,500 une seule fois
+            - **Pas de double comptage** : Chaque client churned compte pour ${:,.0f} (CLTV réel dataset) une seule fois
             - **Dimensions orthogonales** : Un client = 1 ville + 1 contrat + 1 service
             - **Géo : Top 9 + Autres** pour maintenir lisibilité tout en gardant 100%
-            """.format(pertes_totales))
+            """.format(pertes_totales, CLTV_REFERENCE))
             
         except Exception as e:
             st.error(f"❌ Erreur affichage Treemaps: {str(e)}")
@@ -1781,21 +1790,25 @@ def render_cost_tab(df: pd.DataFrame):
             ) * 1000
         
         with col_sim3:
-            # COHÉRENCE: Utiliser 3500 comme référence (aligné avec tout le dashboard)
-            cltv_reference = 3500
+            # COHÉRENCE: Utiliser CLTV churned réel du dataset
+            if 'CLTV' in df_temp.columns:
+                cltv_reference = int(df_temp[df_temp['Is_Churned']==1]['CLTV'].mean())
+            else:
+                cltv_reference = 3500  # Fallback seulement
+            
             cltv_scenario = st.slider(
                 "💎 CLTV ajusté ($)",
-                min_value=2500,
-                max_value=4500,
+                min_value=int(cltv_reference * 0.6),  # -40%
+                max_value=int(cltv_reference * 1.4),  # +40%
                 value=cltv_reference,
                 step=250,
-                help="Valeur vie client - Référence dashboard: $3,500"
+                help=f"Valeur vie client - Référence dataset: ${cltv_reference:,}"
             )
         
         # Note cohérence CLTV
-        st.info("""
-        💡 **Note CLTV :** La valeur de référence $3,500 est utilisée de manière cohérente dans tout le dashboard. 
-        Le simulateur vous permet de tester des scénarios avec des CLTV ajustés (±$1,000) pour analyser la sensibilité du ROI.
+        st.info(f"""
+        💡 **Note CLTV :** La valeur de référence ${cltv_reference:,} provient du **CLTV moyen réel des clients churned** dans vos données. 
+        Le simulateur vous permet de tester des scénarios avec des CLTV ajustés (±40%) pour analyser la sensibilité du ROI.
         """)
         
         # Calculs ROI
@@ -2235,8 +2248,8 @@ def render_mode1_visuals(df: pd.DataFrame, threshold: int, max_cities: int):
                 💡 *Analogie:* Sondage avec 4 personnes vs 1,000 personnes
                 
                 #### 2️⃣ IMPACT BUSINESS
-                - **4 churned** × $3,500 = $14,000 pertes → ROI campagne < 2x (non rentable)
-                - **50 churned** × $3,500 = $175,000 pertes → ROI campagne 5x+ (rentable)
+                - **4 churned** × $4,149 = $17,596 pertes → ROI campagne < 2x (non rentable)
+                - **50 churned** × $4,149 = $207,450 pertes → ROI campagne 5x+ (rentable)
                 - **Seuil minimum:** $50,000 impact pour rentabilité action
                 
                 #### 3️⃣ RESSOURCES LIMITÉES
@@ -2315,8 +2328,8 @@ def render_mode1_visuals(df: pd.DataFrame, threshold: int, max_cities: int):
             # Principe: Impact absolu (pertes $) prime sur taux relatif (%)
             # Source: Reichheld & Sasser (HBR) - Priorité aux segments fort impact absolu
             
-            # Calculer pertes financières pour chaque ville
-            critical_cities['Pertes'] = critical_cities['Churned'] * 3500
+            # Calculer pertes financières pour chaque ville (CLTV réel)
+            critical_cities['Pertes'] = critical_cities['Churned'] * 4149  # CLTV churned dataset
             
             def categorize_churn_priority(row):
                 """
@@ -2399,7 +2412,7 @@ def render_mode1_visuals(df: pd.DataFrame, threshold: int, max_cities: int):
             
             **Q: Comment sont calculés les ROI ?**  
             A: (Récupération clients × $3,500 - Coût campagne) / Coût campagne  
-            Exemple: Récup 30 clients × $3,500 - $5,000 / $5,000 = ROI 20x
+            Exemple: Récup 30 clients × $4,149 - $5,000 / $5,000 = ROI 24x
             
             **Q: Pourquoi le slider change les KPIs ?**  
             A: Les KPIs affichent l'impact TOTAL des N villes sélectionnées  
@@ -2418,8 +2431,11 @@ def render_mode1_visuals(df: pd.DataFrame, threshold: int, max_cities: int):
     except Exception as e:
         st.error(f"Erreur Mode 1: {str(e)}")
 
-def calculate_financial_impact(city_stats: pd.DataFrame, cltv: float = 3500):
-    """Calcule l'impact financier avec CLTV"""
+def calculate_financial_impact(city_stats: pd.DataFrame, cltv: float = 4149):
+    """
+    Calcule l'impact financier avec CLTV réel du dataset
+    Default: 4149 = CLTV moyen churned du dataset réel
+    """
     total_churned = city_stats['Churned'].sum()
     total_loss = total_churned * cltv
     
@@ -2441,9 +2457,9 @@ def create_priority_matrix(city_stats: pd.DataFrame):
     Cohérent avec logique Mode 1 (impact $ + volume + taux)
     """
     
-    # Calculer pertes financières
+    # Calculer pertes financières avec CLTV réel dataset
     city_stats = city_stats.copy()
-    city_stats['Pertes'] = city_stats['Churned'] * 3500
+    city_stats['Pertes'] = city_stats['Churned'] * 4149  # CLTV churned réel
     
     # Catégorisation EXPERTE basée impact business
     def categorize_matrix(row):
@@ -2884,7 +2900,7 @@ def render_mode2_visuals(df: pd.DataFrame, top_n: int, sort_by: str):
             
             **Q: Comment sont calculés les ROI ?**  
             A: (Récupération clients × $3,500 - Coût campagne) / Coût campagne  
-            Exemple: Récup 30 clients × $3,500 - $5,000 / $5,000 = ROI 20x
+            Exemple: Récup 30 clients × $4,149 - $5,000 / $5,000 = ROI 24x
             
             **Q: Pourquoi le slider change les KPIs ?**  
             A: Les KPIs affichent l'impact TOTAL des N villes sélectionnées  
@@ -3195,7 +3211,7 @@ def render_action_plan_tab(df: pd.DataFrame):
             'Is_Churned': 'sum'
         })
         city_stats.columns = ['City', 'Total', 'Churned']
-        city_stats['Pertes'] = city_stats['Churned'] * 3500
+        city_stats['Pertes'] = city_stats['Churned'] * 4149  # CLTV churned réel dataset
         city_stats = city_stats[city_stats['Total'] >= 50].sort_values('Pertes', ascending=False)
         
         top3_cities = city_stats.head(3)
