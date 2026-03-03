@@ -2239,66 +2239,185 @@ def render_satisfaction_tab(df: pd.DataFrame):
         # SECTION 4: CORRÉLATION ÂGE (SIMPLE)
         # ========================================
         
+      
         st.markdown("### 📈 Corrélation Âge × Satisfaction")
         
         if 'Age' in df_temp.columns:
-            sample_size = min(2000, len(df_temp))
-            df_sample = df_temp.sample(sample_size, random_state=42)
-            
-            fig_corr = go.Figure()
-            
-            colors_nps = {'Promoters': '#27ae60', 'Passives': '#f39c12', 'Detractors': '#e74c3c'}
-            
-            for nps_cat in ['Detractors', 'Passives', 'Promoters']:
-                df_cat = df_sample[df_sample['NPS_Category'] == nps_cat]
+            try:
+                # Filtrer données valides
+                df_clean = df_temp[['Age', 'Satisfaction Score', 'NPS_Category']].dropna()
                 
-                fig_corr.add_trace(go.Scatter(
-                    x=df_cat['Age'],
-                    y=df_cat['Satisfaction Score'],
-                    mode='markers',
-                    name=nps_cat,
-                    marker=dict(
-                        color=colors_nps[nps_cat],
-                        size=6,
-                        opacity=0.6
-                    ),
-                    hovertemplate='<b>%{fullData.name}</b><br>Âge: %{x}<br>Score: %{y}<extra></extra>'
-                ))
+                if len(df_clean) > 0:
+                    # Échantillonner pour performance
+                    sample_size = min(2000, len(df_clean))
+                    df_sample = df_clean.sample(sample_size, random_state=42)
+                    
+                    # Calculer corrélation et p-value
+                    from scipy import stats
+                    correlation, p_value = stats.pearsonr(df_clean['Age'], df_clean['Satisfaction Score'])
+                    
+                    # Créer figure
+                    fig_scatter = go.Figure()
+                    
+                    # Couleurs NPS (identiques Power BI)
+                    colors_nps = {
+                        'Detractors': '#e74c3c',
+                        'Passives': '#f39c12',
+                        'Promoters': '#27ae60'
+                    }
+                    
+                    # Ajouter points par catégorie NPS
+                    for nps_cat in ['Detractors', 'Passives', 'Promoters']:
+                        df_cat = df_sample[df_sample['NPS_Category'] == nps_cat]
+                        
+                        if len(df_cat) > 0:
+                            fig_scatter.add_trace(go.Scatter(
+                                x=df_cat['Age'],
+                                y=df_cat['Satisfaction Score'],
+                                mode='markers',
+                                name=nps_cat,
+                                marker=dict(
+                                    color=colors_nps[nps_cat],
+                                    size=8,
+                                    opacity=0.7,
+                                    line=dict(width=0.5, color='rgba(255,255,255,0.3)')
+                                ),
+                                hovertemplate='<b>%{fullData.name}</b><br>Âge: %{x}<br>Satisfaction: %{y}<extra></extra>'
+                            ))
+                    
+                    # Calculer et ajouter trendline
+                    z = np.polyfit(df_sample['Age'], df_sample['Satisfaction Score'], 1)
+                    p = np.poly1d(z)
+                    x_trend = np.array([df_sample['Age'].min(), df_sample['Age'].max()])
+                    y_trend = p(x_trend)
+                    
+                    fig_scatter.add_trace(go.Scatter(
+                        x=x_trend,
+                        y=y_trend,
+                        mode='lines',
+                        name='Tendance',
+                        line=dict(color='cyan', width=3, dash='dash'),
+                        hovertemplate='Trendline<br>y = %.3fx + %.2f<extra></extra>' % (z[0], z[1])
+                    ))
+                    
+                    # Déterminer significativité
+                    if p_value < 0.001:
+                        sig_text = "Très significatif (p<0.001)"
+                        sig_icon = "✅"
+                    elif p_value < 0.05:
+                        sig_text = "Significatif (p<0.05)"
+                        sig_icon = "✅"
+                    else:
+                        sig_text = f"Non significatif (p={p_value:.3f})"
+                        sig_icon = "⚠️"
+                    
+                    # Déterminer force
+                    if abs(correlation) > 0.7:
+                        force = "Forte"
+                    elif abs(correlation) > 0.4:
+                        force = "Modérée"
+                    elif abs(correlation) > 0.2:
+                        force = "Faible"
+                    else:
+                        force = "Nulle"
+                    
+                    # Layout style Power BI
+                    fig_scatter.update_layout(
+                        title=dict(
+                            text=f"<b>Corrélation Âge × Satisfaction</b><br><sub>r = {correlation:.3f} • {force} • {sig_icon} {sig_text}</sub>",
+                            font=dict(size=18, color='white'),
+                            x=0.5,
+                            xanchor='center'
+                        ),
+                        xaxis=dict(
+                            title="<b>Âge</b>",
+                            showgrid=True,
+                            gridcolor='rgba(255,255,255,0.1)',
+                            zeroline=False,
+                            color='white',
+                            tickfont=dict(size=12)
+                        ),
+                        yaxis=dict(
+                            title="<b>Score Satisfaction</b>",
+                            showgrid=True,
+                            gridcolor='rgba(255,255,255,0.1)',
+                            zeroline=False,
+                            color='white',
+                            tickvals=[1, 2, 3, 4, 5],
+                            ticktext=['1', '2', '3', '4', '5'],
+                            range=[0.5, 5.5]
+                        ),
+                        template='plotly_dark',
+                        plot_bgcolor='rgba(30, 30, 46, 0.95)',
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        height=500,
+                        legend=dict(
+                            orientation="h",
+                            yanchor="top",
+                            y=-0.15,
+                            xanchor="center",
+                            x=0.5,
+                            bgcolor='rgba(0,0,0,0.3)',
+                            bordercolor='rgba(255,255,255,0.2)',
+                            borderwidth=1
+                        ),
+                        hovermode='closest',
+                        margin=dict(l=60, r=40, t=100, b=80)
+                    )
+                    
+                    # Afficher graphique
+                    st.plotly_chart(fig_scatter, use_container_width=True)
+                    
+                    # Métriques détaillées
+                    col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+                    
+                    with col_stat1:
+                        st.metric(
+                            "Corrélation",
+                            f"{correlation:.3f}",
+                            help="Coefficient de Pearson (-1 à +1)"
+                        )
+                    
+                    with col_stat2:
+                        force_color = "#27ae60" if abs(correlation) > 0.4 else "#f39c12" if abs(correlation) > 0.2 else "#e74c3c"
+                        st.markdown(f'''
+                        <div style="text-align:center; padding:10px; background:{force_color}22; border-radius:8px;">
+                            <div style="color:#888; font-size:12px;">FORCE</div>
+                            <div style="color:{force_color}; font-size:24px; font-weight:700;">{force}</div>
+                        </div>
+                        ''', unsafe_allow_html=True)
+                    
+                    with col_stat3:
+                        sig_color = "#27ae60" if p_value < 0.05 else "#e74c3c"
+                        st.markdown(f'''
+                        <div style="text-align:center; padding:10px; background:{sig_color}22; border-radius:8px;">
+                            <div style="color:#888; font-size:12px;">P-VALUE</div>
+                            <div style="color:{sig_color}; font-size:24px; font-weight:700;">{"<0.001" if p_value < 0.001 else f"{p_value:.3f}"}</div>
+                        </div>
+                        ''', unsafe_allow_html=True)
+                    
+                    with col_stat4:
+                        r_squared = correlation ** 2
+                        st.metric(
+                            "R² (variance)",
+                            f"{r_squared*100:.1f}%",
+                            help="Part de variance expliquée par l'âge"
+                        )
+                    
+                    # Interprétation experte
+                    st.markdown(f'''
+                    <div style="background: rgba(102,126,234,0.1); padding: 15px; border-radius: 10px; margin-top: 15px; border-left: 4px solid #667eea;">
+                        <h4 style="color: #667eea; margin-top: 0;">💡 Interprétation</h4>
+                        <p style="margin: 5px 0;">
+                            La corrélation de <strong>{correlation:.3f}</strong> indique une relation <strong>{force.lower()}</strong> entre l'âge et la satisfaction.<br>
+                            L'âge explique seulement <strong>{r_squared*100:.1f}%</strong> de la variance de satisfaction.<br>
+                            {sig_text}
+                        </p>
+                    </div>
+                    ''', unsafe_allow_html=True)
             
-            z = np.polyfit(df_sample['Age'], df_sample['Satisfaction Score'], 1)
-            p = np.poly1d(z)
-            x_trend = np.array([df_sample['Age'].min(), df_sample['Age'].max()])
-            y_trend = p(x_trend)
-            
-            fig_corr.add_trace(go.Scatter(
-                x=x_trend,
-                y=y_trend,
-                mode='lines',
-                name='Trend',
-                line=dict(color='cyan', width=3, dash='dash')
-            ))
-            
-            corr = df_temp[['Age', 'Satisfaction Score']].corr().iloc[0, 1]
-            
-            fig_corr.update_layout(
-                title=f"<b>Corrélation: {corr:.3f}</b>",
-                xaxis_title="<b>Âge</b>",
-                yaxis_title="<b>Satisfaction</b>",
-                template="plotly_dark",
-                height=450
-            )
-            
-            st.plotly_chart(fig_corr, use_container_width=True)
-            
-            col_c1, col_c2, col_c3 = st.columns(3)
-            col_c1.metric("Corrélation", f"{corr:.3f}")
-            
-            if abs(corr) > 0.3:
-                col_c2.success("✅ Modérée")
-            elif abs(corr) > 0.1:
-                col_c2.info("💡 Faible")
-            else:
-                col_c2.warning("⚠️ Nulle")
+            except Exception as e:
+                st.error(f"Erreur graphique corrélation: {str(e)}")
         
         st.markdown("---")
         
