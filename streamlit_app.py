@@ -13,7 +13,6 @@ Architecture:
 
 Date: 17/02/2024
 """
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -25,6 +24,8 @@ from plotly.subplots import make_subplots
 from typing import Tuple, Optional, Dict, List
 import warnings
 warnings.filterwarnings('ignore')
+
+from nps_simulator_component import integrate_simulator_in_satisfaction_tab
 
 # ============================================================================
 # CONFIGURATION GLOBALE
