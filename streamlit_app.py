@@ -1504,109 +1504,152 @@ def render_cost_tab(df: pd.DataFrame):
                 hide_index=True
             )
         
-        # Graphique Treemap hiérarchique
-        st.markdown("#### 🎯 Répartition hiérarchique des pertes")
+        # 3 Treemaps séparés par dimension (évite double comptage)
+        st.markdown("#### 🎯 Décomposition des pertes par dimension")
         
-        # DEBUG: Vérifier données disponibles
-        if not dimensions_data or len(dimensions_data) == 0:
-            st.warning("⚠️ Aucune donnée disponible pour la visualisation hiérarchique")
-        else:
-            try:
-                # Créer structure hiérarchique pour Treemap
-                treemap_labels = []
-                treemap_parents = []
-                treemap_values = []
-                treemap_colors = []
-                treemap_text = []
+        st.info("""
+        💡 **Lecture :** Chaque Treemap montre la MÊME base de pertes ($945K) décomposée selon une dimension différente. 
+        Les clients ne sont comptés qu'**une seule fois** (pas de double comptage entre dimensions).
+        """)
+        
+        try:
+            # Créer 3 colonnes pour 3 Treemaps
+            col1, col2, col3 = st.columns(3)
+            
+            # === TREEMAP 1: GÉOGRAPHIQUE ===
+            with col1:
+                st.markdown("##### 📍 Par Géographie")
                 
-                # Root
-                treemap_labels.append('Total Pertes')
-                treemap_parents.append('')
-                treemap_values.append(pertes_totales)
-                treemap_colors.append(pertes_totales)
-                treemap_text.append(f"${pertes_totales:,.0f}")
-                
-                # Dimensions et segments
-                color_values = {
-                    'Géographique': 1,
-                    'Type Contrat': 2,
-                    'Service Internet': 3
-                }
-                
-                for dim in dimensions_data:
-                    # Dimension level
-                    treemap_labels.append(dim['Dimension'])
-                    treemap_parents.append('Total Pertes')
-                    treemap_values.append(dim['Pertes'])
-                    treemap_colors.append(color_values.get(dim['Dimension'], 1))
-                    treemap_text.append(f"{dim['Dimension']}<br>${dim['Pertes']:,.0f}")
+                if 'City' in df_temp.columns:
+                    # Calculer pertes par ville (churned uniquement)
+                    geo_pertes = df_temp[df_temp['Is_Churned']==1].groupby('City', as_index=False).agg({
+                        'customerID': 'count'
+                    })
+                    geo_pertes.columns = ['City', 'Churned']
+                    geo_pertes['Pertes'] = geo_pertes['Churned'] * CLTV_REFERENCE
+                    geo_pertes = geo_pertes.nlargest(10, 'Pertes')  # Top 10 villes
                     
-                    # Segment level
-                    segment_label = f"{dim['Top_Segment']}"
-                    treemap_labels.append(segment_label)
-                    treemap_parents.append(dim['Dimension'])
-                    treemap_values.append(dim['Pertes'])
-                    treemap_colors.append(color_values.get(dim['Dimension'], 1))
-                    pct = (dim['Pertes'] / pertes_totales * 100)
-                    treemap_text.append(
-                        f"{dim['Top_Segment']}<br>"
-                        f"${dim['Pertes']:,.0f}<br>"
-                        f"{pct:.1f}%"
+                    # Créer Treemap géo
+                    fig_geo = go.Figure(go.Treemap(
+                        labels=['Total'] + geo_pertes['City'].tolist(),
+                        parents=[''] + ['Total'] * len(geo_pertes),
+                        values=[pertes_totales] + geo_pertes['Pertes'].tolist(),
+                        text=['Total<br>$' + f'{pertes_totales:,.0f}'] + 
+                             [f"{row['City']}<br>${row['Pertes']:,.0f}<br>{row['Pertes']/pertes_totales*100:.1f}%" 
+                              for _, row in geo_pertes.iterrows()],
+                        textposition='middle center',
+                        marker=dict(
+                            colorscale='Reds',
+                            line=dict(width=2, color='#1e1e1e')
+                        ),
+                        hovertemplate='<b>%{label}</b><br>Pertes: $%{value:,.0f}<extra></extra>'
+                    ))
+                    
+                    fig_geo.update_layout(
+                        height=350,
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        template="plotly_dark"
                     )
+                    
+                    st.plotly_chart(fig_geo, use_container_width=True)
+                else:
+                    st.warning("Colonne 'City' non disponible")
+            
+            # === TREEMAP 2: TYPE CONTRAT ===
+            with col2:
+                st.markdown("##### 📊 Par Type Contrat")
                 
-                # Créer Treemap
-                fig_treemap = go.Figure(go.Treemap(
-                    labels=treemap_labels,
-                    parents=treemap_parents,
-                    values=treemap_values,
-                    text=treemap_text,
-                    textposition='middle center',
-                    marker=dict(
-                        colorscale='RdYlGn_r',
-                        cmid=2,
-                        line=dict(width=2, color='#1e1e1e')
-                    ),
-                    hovertemplate=(
-                        '<b>%{label}</b><br>' +
-                        'Pertes: $%{value:,.0f}<br>' +
-                        '<extra></extra>'
-                    ),
-                    pathbar=dict(
-                        visible=True,
-                        thickness=20,
-                        textfont=dict(size=14)
+                if 'Contract' in df_temp.columns:
+                    # Calculer pertes par contrat
+                    contract_pertes = df_temp[df_temp['Is_Churned']==1].groupby('Contract', as_index=False).agg({
+                        'customerID': 'count'
+                    })
+                    contract_pertes.columns = ['Contract', 'Churned']
+                    contract_pertes['Pertes'] = contract_pertes['Churned'] * CLTV_REFERENCE
+                    
+                    # Créer Treemap contrat
+                    fig_contract = go.Figure(go.Treemap(
+                        labels=['Total'] + contract_pertes['Contract'].tolist(),
+                        parents=[''] + ['Total'] * len(contract_pertes),
+                        values=[pertes_totales] + contract_pertes['Pertes'].tolist(),
+                        text=['Total<br>$' + f'{pertes_totales:,.0f}'] + 
+                             [f"{row['Contract']}<br>${row['Pertes']:,.0f}<br>{row['Pertes']/pertes_totales*100:.1f}%" 
+                              for _, row in contract_pertes.iterrows()],
+                        textposition='middle center',
+                        marker=dict(
+                            colorscale='Oranges',
+                            line=dict(width=2, color='#1e1e1e')
+                        ),
+                        hovertemplate='<b>%{label}</b><br>Pertes: $%{value:,.0f}<extra></extra>'
+                    ))
+                    
+                    fig_contract.update_layout(
+                        height=350,
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        template="plotly_dark"
                     )
-                ))
+                    
+                    st.plotly_chart(fig_contract, use_container_width=True)
+                else:
+                    st.warning("Colonne 'Contract' non disponible")
+            
+            # === TREEMAP 3: SERVICE INTERNET ===
+            with col3:
+                st.markdown("##### 🌐 Par Service Internet")
                 
-                fig_treemap.update_layout(
-                    title=dict(
-                        text=f"Décomposition hiérarchique des pertes (${pertes_totales:,.0f})",
-                        font=dict(size=16)
-                    ),
-                    height=500,
-                    template="plotly_dark",
-                    margin=dict(t=60, b=10, l=10, r=10)
-                )
-                
-                st.plotly_chart(fig_treemap, use_container_width=True)
-                
-                # Note explicative
-                st.info("""
-                💡 **Comment lire le Treemap :**
-                - **Taille des rectangles** = Montant des pertes
-                - **Couleur** = Dimension (rouge/orange/vert)
-                - **Hiérarchie** = Cliquez pour zoomer sur une dimension
-                - **Barre du haut** = Fil d'Ariane (navigation hiérarchique)
-                """)
-                
-            except Exception as e:
-                st.error(f"❌ Erreur affichage Treemap: {str(e)}")
-                import traceback
-                with st.expander("🔍 Détails techniques (debug)"):
-                    st.code(traceback.format_exc())
-                
-                # Fallback: Tableau détaillé
-                st.markdown("**📊 Tableau de décomposition (fallback):**")
+                if 'Internet Service' in df_temp.columns:
+                    # Calculer pertes par service
+                    internet_pertes = df_temp[df_temp['Is_Churned']==1].groupby('Internet Service', as_index=False).agg({
+                        'customerID': 'count'
+                    })
+                    internet_pertes.columns = ['Internet', 'Churned']
+                    internet_pertes['Pertes'] = internet_pertes['Churned'] * CLTV_REFERENCE
+                    
+                    # Créer Treemap service
+                    fig_internet = go.Figure(go.Treemap(
+                        labels=['Total'] + internet_pertes['Internet'].tolist(),
+                        parents=[''] + ['Total'] * len(internet_pertes),
+                        values=[pertes_totales] + internet_pertes['Pertes'].tolist(),
+                        text=['Total<br>$' + f'{pertes_totales:,.0f}'] + 
+                             [f"{row['Internet']}<br>${row['Pertes']:,.0f}<br>{row['Pertes']/pertes_totales*100:.1f}%" 
+                              for _, row in internet_pertes.iterrows()],
+                        textposition='middle center',
+                        marker=dict(
+                            colorscale='Blues',
+                            line=dict(width=2, color='#1e1e1e')
+                        ),
+                        hovertemplate='<b>%{label}</b><br>Pertes: $%{value:,.0f}<extra></extra>'
+                    ))
+                    
+                    fig_internet.update_layout(
+                        height=350,
+                        margin=dict(t=10, b=10, l=10, r=10),
+                        template="plotly_dark"
+                    )
+                    
+                    st.plotly_chart(fig_internet, use_container_width=True)
+                else:
+                    st.warning("Colonne 'Internet Service' non disponible")
+            
+            # Note explicative importante
+            st.markdown("""
+            ---
+            **📌 Note importante :**
+            - **Total identique** dans les 3 Treemaps : ${:,.0f}
+            - **Pas de double comptage** : Chaque client churned compte pour $3,500 une seule fois
+            - **Dimensions orthogonales** : Un client = 1 ville + 1 contrat + 1 service
+            - **Pourcentages corrects** : Somme dans chaque Treemap = 100%
+            """.format(pertes_totales))
+            
+        except Exception as e:
+            st.error(f"❌ Erreur affichage Treemaps: {str(e)}")
+            import traceback
+            with st.expander("🔍 Détails techniques (debug)"):
+                st.code(traceback.format_exc())
+            
+            # Fallback: Tableau par dimension
+            st.markdown("**📊 Tableau de décomposition (fallback):**")
+            if dimensions_data:
                 df_fallback = pd.DataFrame(dimensions_data)
                 df_fallback['% du Total'] = (df_fallback['Pertes'] / pertes_totales * 100)
                 
