@@ -19,8 +19,8 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-import re
 from collections import Counter
+import re
 from plotly.subplots import make_subplots
 from typing import Tuple, Optional, Dict, List
 import warnings
@@ -2029,6 +2029,10 @@ def render_satisfaction_tab(df: pd.DataFrame):
         detractors_pct = (detractors_count / total_clients) * 100
         
         nps_score = promoters_pct - detractors_pct
+        
+        # BUG FIX: Créer churned variable
+        churned = df_temp[df_temp['Is_Churned'] == 1].copy()
+        stayed = df_temp[df_temp['Is_Churned'] == 0].copy()
         
         # ========================================
         # SECTION 1: NPS GÉANT
