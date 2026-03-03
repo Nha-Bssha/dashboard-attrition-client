@@ -711,6 +711,9 @@ def main():
     # Appliquer les filtres
     df_filtered = render_filters(df)
     
+    # CRITIQUE: Recréer les colonnes calculées après filtrage
+    df_filtered = create_calculated_columns(df_filtered)
+    
     # Vérifier si les données filtrées sont vides
     is_valid_filtered, _ = DataValidator.validate_dataframe(df_filtered)
     
