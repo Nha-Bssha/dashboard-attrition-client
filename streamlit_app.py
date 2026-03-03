@@ -1378,18 +1378,23 @@ def render_cost_tab(df: pd.DataFrame):
         total_retained = total_customers - total_churned
         churn_rate = (total_churned / total_customers * 100) if total_customers > 0 else 0
         
-        # CLTV moyen (depuis colonne ou calculé)
+        # CLTV : Utiliser constante 3500 pour cohérence totale dashboard
+        CLTV_REFERENCE = 3500  # Constante cohérente partout
+        
         if 'CLTV' in df_temp.columns:
-            cltv_moyen = df_temp['CLTV'].mean()
+            cltv_dataset_moyen = df_temp['CLTV'].mean()
             cltv_churned = df_temp[df_temp['Is_Churned']==1]['CLTV'].mean()
             cltv_retained = df_temp[df_temp['Is_Churned']==0]['CLTV'].mean()
         else:
-            cltv_moyen = 3500
-            cltv_churned = 3500
-            cltv_retained = 3500
+            cltv_dataset_moyen = CLTV_REFERENCE
+            cltv_churned = CLTV_REFERENCE
+            cltv_retained = CLTV_REFERENCE
+        
+        # Utiliser CLTV_REFERENCE pour tous les calculs (cohérence)
+        cltv_moyen = CLTV_REFERENCE
         
         # Pertes totales
-        pertes_totales = total_churned * cltv_moyen
+        pertes_totales = total_churned * CLTV_REFERENCE
         impact_annuel = pertes_totales  # Pertes sur la période
         
         # Revenus mensuels moyens
@@ -1445,7 +1450,7 @@ def render_cost_tab(df: pd.DataFrame):
                 'customerID': 'count'
             })
             city_pertes.columns = ['City', 'Churned']
-            city_pertes['Pertes'] = city_pertes['Churned'] * cltv_moyen
+            city_pertes['Pertes'] = city_pertes['Churned'] * CLTV_REFERENCE
             top_city = city_pertes.nlargest(1, 'Pertes').iloc[0]
             dimensions_data.append({
                 'Dimension': 'Géographique',
@@ -1460,7 +1465,7 @@ def render_cost_tab(df: pd.DataFrame):
                 'customerID': 'count'
             })
             contract_pertes.columns = ['Contract', 'Churned']
-            contract_pertes['Pertes'] = contract_pertes['Churned'] * cltv_moyen
+            contract_pertes['Pertes'] = contract_pertes['Churned'] * CLTV_REFERENCE
             top_contract = contract_pertes.nlargest(1, 'Pertes').iloc[0]
             dimensions_data.append({
                 'Dimension': 'Type Contrat',
@@ -1475,7 +1480,7 @@ def render_cost_tab(df: pd.DataFrame):
                 'customerID': 'count'
             })
             internet_pertes.columns = ['Internet', 'Churned']
-            internet_pertes['Pertes'] = internet_pertes['Churned'] * cltv_moyen
+            internet_pertes['Pertes'] = internet_pertes['Churned'] * CLTV_REFERENCE
             top_internet = internet_pertes.nlargest(1, 'Pertes').iloc[0]
             dimensions_data.append({
                 'Dimension': 'Service Internet',
@@ -1589,14 +1594,14 @@ def render_cost_tab(df: pd.DataFrame):
                 <h4 style="color: #e74c3c; margin-top: 0;">⚠️ Valeur Totale à Risque</h4>
             """, unsafe_allow_html=True)
             
-            valeur_risque = total_churned * cltv_moyen
+            valeur_risque = total_churned * CLTV_REFERENCE
             st.metric("Clients Perdus × CLTV", f"${valeur_risque:,.0f}")
             
             st.markdown(f"""
             <div style="margin-top: 15px; font-size: 14px;">
                 <strong>Détails:</strong><br>
                 • {total_churned:,} clients churned<br>
-                • CLTV moyen: ${cltv_moyen:,.0f}<br>
+                • CLTV référence: ${CLTV_REFERENCE:,.0f}<br>
                 • Impact: ${valeur_risque:,.0f}
             </div>
             </div>
@@ -1636,14 +1641,22 @@ def render_cost_tab(df: pd.DataFrame):
             ) * 1000
         
         with col_sim3:
+            # COHÉRENCE: Utiliser 3500 comme référence (aligné avec tout le dashboard)
+            cltv_reference = 3500
             cltv_scenario = st.slider(
                 "💎 CLTV ajusté ($)",
-                min_value=2000,
-                max_value=6000,
-                value=int(cltv_moyen),
-                step=500,
-                help="Valeur vie client (ajustable)"
+                min_value=2500,
+                max_value=4500,
+                value=cltv_reference,
+                step=250,
+                help="Valeur vie client - Référence dashboard: $3,500"
             )
+        
+        # Note cohérence CLTV
+        st.info("""
+        💡 **Note CLTV :** La valeur de référence $3,500 est utilisée de manière cohérente dans tout le dashboard. 
+        Le simulateur vous permet de tester des scénarios avec des CLTV ajustés (±$1,000) pour analyser la sensibilité du ROI.
+        """)
         
         # Calculs ROI
         clients_recuperes = int(total_churned * retention_rate)
@@ -1750,7 +1763,7 @@ def render_cost_tab(df: pd.DataFrame):
             new_churn_rate = churn_rate * (1 - reduction/100)
             new_churned = int(total_customers * new_churn_rate / 100)
             clients_sauves = total_churned - new_churned
-            gain_annuel = clients_sauves * cltv_moyen
+            gain_annuel = clients_sauves * CLTV_REFERENCE
             
             scenarios_data.append({
                 'Réduction Churn': f'-{reduction}%',
@@ -1800,7 +1813,7 @@ def render_cost_tab(df: pd.DataFrame):
         
         # Calculs métriques
         cac_estimate = 500  # Customer Acquisition Cost estimé
-        ltv_cac_ratio = cltv_moyen / cac_estimate if cac_estimate > 0 else 0
+        ltv_cac_ratio = CLTV_REFERENCE / cac_estimate if cac_estimate > 0 else 0
         churn_cost_per_customer = pertes_totales / total_churned if total_churned > 0 else 0
         
         if 'Tenure in Months' in df_temp.columns:
@@ -2237,12 +2250,23 @@ def render_mode1_visuals(df: pd.DataFrame, threshold: int, max_cities: int):
             **Q: Pourquoi certaines villes n'apparaissent pas ?**  
             A: Moins de 50 clients = résultat trop aléatoire (comme sondage 4 personnes)
             
-            **Q: Pourquoi Los Angeles "Urgence" et Sacramento "Intervention" ?**  
-            A: Los Angeles perd $315K/an, Sacramento $91K/an → Impact 3.5x plus élevé
+            **Q: Pourquoi la matrice dit "Urgence" pour certaines villes ?**  
+            A: Critères (un seul suffit) : Pertes ≥$150K OU Volume ≥50 OU Taux ≥30%
+            
+            **Q: Pourquoi la matrice dit "Intervention ciblée" pour d'autres ?**  
+            A: Critères (un seul suffit) : Pertes ≥$75K OU Volume ≥25 OU Taux ≥25%  
+            Exemple: San Jose (25.9%, 29 churned, $101K) valide 2 critères (taux + pertes)
             
             **Q: Comment sont calculés les ROI ?**  
             A: (Récupération clients × $3,500 - Coût campagne) / Coût campagne  
             Exemple: Récup 30 clients × $3,500 - $5,000 / $5,000 = ROI 20x
+            
+            **Q: Pourquoi le slider change les KPIs ?**  
+            A: Les KPIs affichent l'impact TOTAL des N villes sélectionnées  
+            Top 3 = $598K, Top 8 = $945K → Le slider montre différents scénarios
+            
+            **Q: Pourquoi Los Angeles "Urgence" et Sacramento "Intervention" ?**  
+            A: Los Angeles perd $315K/an, Sacramento $91K/an → Impact 3.5x plus élevé
             
             **Q: D'où viennent les seuils 30% / 25% / 20% ?**  
             A: Benchmarks industrie télécoms :
