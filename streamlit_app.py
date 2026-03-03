@@ -1504,49 +1504,68 @@ def render_cost_tab(df: pd.DataFrame):
                 hide_index=True
             )
         
-        # Graphique Sunburst (si plotly disponible)
+        # Graphique Sunburst hiérarchique
         st.markdown("#### 🎯 Répartition hiérarchique des pertes")
         
-        # Créer données pour sunburst
-        sunburst_data = []
-        for dim in dimensions_data:
-            sunburst_data.append({
-                'labels': dim['Top_Segment'],
-                'parents': dim['Dimension'],
-                'values': dim['Pertes']
-            })
-            sunburst_data.append({
-                'labels': dim['Dimension'],
-                'parents': 'Total Pertes',
-                'values': dim['Pertes']
-            })
-        sunburst_data.append({
-            'labels': 'Total Pertes',
-            'parents': '',
-            'values': pertes_totales
-        })
-        
-        df_sunburst = pd.DataFrame(sunburst_data)
-        
-        fig_sunburst = go.Figure(go.Sunburst(
-            labels=df_sunburst['labels'],
-            parents=df_sunburst['parents'],
-            values=df_sunburst['values'],
-            branchvalues="total",
-            marker=dict(
-                colorscale='RdYlGn_r',
-                cmid=pertes_totales/2
-            ),
-            textinfo="label+percent parent+value",
-        ))
-        
-        fig_sunburst.update_layout(
-            title="Décomposition hiérarchique des pertes ($)",
-            height=500,
-            template="plotly_dark"
-        )
-        
-        st.plotly_chart(fig_sunburst, use_container_width=True)
+        try:
+            # Créer données pour sunburst - Structure simplifiée
+            sunburst_labels = []
+            sunburst_parents = []
+            sunburst_values = []
+            
+            # Root
+            sunburst_labels.append('Total Pertes')
+            sunburst_parents.append('')
+            sunburst_values.append(pertes_totales)
+            
+            # Dimensions
+            for dim in dimensions_data:
+                # Dimension level
+                sunburst_labels.append(dim['Dimension'])
+                sunburst_parents.append('Total Pertes')
+                sunburst_values.append(dim['Pertes'])
+                
+                # Segment level
+                sunburst_labels.append(f"{dim['Top_Segment']}")
+                sunburst_parents.append(dim['Dimension'])
+                sunburst_values.append(dim['Pertes'])
+            
+            # Créer figure
+            fig_sunburst = go.Figure(go.Sunburst(
+                labels=sunburst_labels,
+                parents=sunburst_parents,
+                values=sunburst_values,
+                branchvalues="total",
+                marker=dict(
+                    colorscale='RdYlGn_r'
+                ),
+                textinfo="label+percent entry",
+                hovertemplate='<b>%{label}</b><br>Pertes: $%{value:,.0f}<br>Part: %{percentEntry}<extra></extra>'
+            ))
+            
+            fig_sunburst.update_layout(
+                title="Décomposition hiérarchique des pertes ($)",
+                height=500,
+                template="plotly_dark",
+                margin=dict(t=50, b=10, l=10, r=10)
+            )
+            
+            st.plotly_chart(fig_sunburst, use_container_width=True)
+            
+        except Exception as e:
+            st.error(f"❌ Erreur affichage Sunburst: {str(e)}")
+            # Fallback: Afficher tableau à la place
+            st.markdown("**📊 Répartition des pertes (tableau alternatif):**")
+            if dimensions_data:
+                df_alt = pd.DataFrame(dimensions_data)
+                st.dataframe(
+                    df_alt[['Dimension', 'Top_Segment', 'Pertes', 'Clients']].style.format({
+                        'Pertes': '${:,.0f}',
+                        'Clients': '{:,.0f}'
+                    }),
+                    use_container_width=True,
+                    hide_index=True
+                )
         
         st.markdown("---")
         
