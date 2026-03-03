@@ -1504,67 +1504,109 @@ def render_cost_tab(df: pd.DataFrame):
                 hide_index=True
             )
         
-        # Graphique hiérarchique des pertes
+        # Graphique Treemap hiérarchique
         st.markdown("#### 🎯 Répartition hiérarchique des pertes")
         
         # DEBUG: Vérifier données disponibles
         if not dimensions_data or len(dimensions_data) == 0:
             st.warning("⚠️ Aucune donnée disponible pour la visualisation hiérarchique")
         else:
-            # Alternative: Bar Chart empilé (plus fiable que Sunburst)
             try:
-                # Créer données pour graphique empilé
-                fig_decomp = go.Figure()
+                # Créer structure hiérarchique pour Treemap
+                treemap_labels = []
+                treemap_parents = []
+                treemap_values = []
+                treemap_colors = []
+                treemap_text = []
                 
-                colors = ['#e74c3c', '#f39c12', '#3498db', '#9b59b6', '#1abc9c']
+                # Root
+                treemap_labels.append('Total Pertes')
+                treemap_parents.append('')
+                treemap_values.append(pertes_totales)
+                treemap_colors.append(pertes_totales)
+                treemap_text.append(f"${pertes_totales:,.0f}")
                 
-                for i, dim in enumerate(dimensions_data):
-                    fig_decomp.add_trace(go.Bar(
-                        name=f"{dim['Dimension']}<br>{dim['Top_Segment']}",
-                        x=['Pertes Totales'],
-                        y=[dim['Pertes']],
-                        text=f"${dim['Pertes']:,.0f}<br>{dim['Dimension']}<br>{dim['Top_Segment']}",
-                        textposition='inside',
-                        marker_color=colors[i % len(colors)],
-                        hovertemplate=f"<b>{dim['Dimension']}</b><br>" +
-                                    f"{dim['Top_Segment']}<br>" +
-                                    f"Pertes: ${dim['Pertes']:,.0f}<br>" +
-                                    f"Clients: {dim['Clients']:,.0f}<br>" +
-                                    f"Part: {dim['Pertes']/pertes_totales*100:.1f}%<extra></extra>"
-                    ))
+                # Dimensions et segments
+                color_values = {
+                    'Géographique': 1,
+                    'Type Contrat': 2,
+                    'Service Internet': 3
+                }
                 
-                fig_decomp.update_layout(
-                    title=f"Décomposition des pertes totales (${pertes_totales:,.0f})",
-                    barmode='stack',
-                    showlegend=True,
-                    legend=dict(
-                        orientation="h",
-                        yanchor="bottom",
-                        y=1.02,
-                        xanchor="right",
-                        x=1
+                for dim in dimensions_data:
+                    # Dimension level
+                    treemap_labels.append(dim['Dimension'])
+                    treemap_parents.append('Total Pertes')
+                    treemap_values.append(dim['Pertes'])
+                    treemap_colors.append(color_values.get(dim['Dimension'], 1))
+                    treemap_text.append(f"{dim['Dimension']}<br>${dim['Pertes']:,.0f}")
+                    
+                    # Segment level
+                    segment_label = f"{dim['Top_Segment']}"
+                    treemap_labels.append(segment_label)
+                    treemap_parents.append(dim['Dimension'])
+                    treemap_values.append(dim['Pertes'])
+                    treemap_colors.append(color_values.get(dim['Dimension'], 1))
+                    pct = (dim['Pertes'] / pertes_totales * 100)
+                    treemap_text.append(
+                        f"{dim['Top_Segment']}<br>"
+                        f"${dim['Pertes']:,.0f}<br>"
+                        f"{pct:.1f}%"
+                    )
+                
+                # Créer Treemap
+                fig_treemap = go.Figure(go.Treemap(
+                    labels=treemap_labels,
+                    parents=treemap_parents,
+                    values=treemap_values,
+                    text=treemap_text,
+                    textposition='middle center',
+                    marker=dict(
+                        colorscale='RdYlGn_r',
+                        cmid=2,
+                        line=dict(width=2, color='#1e1e1e')
                     ),
-                    height=400,
+                    hovertemplate=(
+                        '<b>%{label}</b><br>' +
+                        'Pertes: $%{value:,.0f}<br>' +
+                        '<extra></extra>'
+                    ),
+                    pathbar=dict(
+                        visible=True,
+                        thickness=20,
+                        textfont=dict(size=14)
+                    )
+                ))
+                
+                fig_treemap.update_layout(
+                    title=dict(
+                        text=f"Décomposition hiérarchique des pertes (${pertes_totales:,.0f})",
+                        font=dict(size=16)
+                    ),
+                    height=500,
                     template="plotly_dark",
-                    xaxis_title="",
-                    yaxis_title="Pertes ($)",
-                    hovermode='closest'
+                    margin=dict(t=60, b=10, l=10, r=10)
                 )
                 
-                st.plotly_chart(fig_decomp, use_container_width=True)
+                st.plotly_chart(fig_treemap, use_container_width=True)
                 
-                # Info complémentaire
-                st.info(f"""
-                💡 **Lecture du graphique :** Le graphique empilé montre la contribution de chaque dimension 
-                aux pertes totales de ${pertes_totales:,.0f}. Chaque segment représente le top contributeur 
-                de sa dimension.
+                # Note explicative
+                st.info("""
+                💡 **Comment lire le Treemap :**
+                - **Taille des rectangles** = Montant des pertes
+                - **Couleur** = Dimension (rouge/orange/vert)
+                - **Hiérarchie** = Cliquez pour zoomer sur une dimension
+                - **Barre du haut** = Fil d'Ariane (navigation hiérarchique)
                 """)
                 
             except Exception as e:
-                st.error(f"❌ Erreur affichage graphique: {str(e)}")
+                st.error(f"❌ Erreur affichage Treemap: {str(e)}")
+                import traceback
+                with st.expander("🔍 Détails techniques (debug)"):
+                    st.code(traceback.format_exc())
                 
                 # Fallback: Tableau détaillé
-                st.markdown("**📊 Tableau de décomposition:**")
+                st.markdown("**📊 Tableau de décomposition (fallback):**")
                 df_fallback = pd.DataFrame(dimensions_data)
                 df_fallback['% du Total'] = (df_fallback['Pertes'] / pertes_totales * 100)
                 
