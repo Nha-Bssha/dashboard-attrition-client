@@ -1970,6 +1970,14 @@ def render_behavior_tab(df: pd.DataFrame):
             st.code(traceback.format_exc())
 
 
+
+
+
+
+
+
+
+
 # ============================================================================
 # FONCTION render_satisfaction_tab - VERSION EXPERT UX/UI
 # Design impactant + Word Cloud + Sunburst + Insights visuels
@@ -2584,9 +2592,8 @@ def render_satisfaction_tab(df: pd.DataFrame):
 # import plotly.express as px
 # from wordcloud import WordCloud
 # import matplotlib.pyplot as plt
-# IMPORTS À VÉRIFIER EN HAUT DU FICHIER :
-# import plotly.express as px
-# (Doit être présent avec les autres imports plotly)
+
+
 
 
 def render_cost_tab(df: pd.DataFrame):
