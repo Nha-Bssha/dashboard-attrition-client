@@ -2498,6 +2498,13 @@ def render_action_plan_tab(df: pd.DataFrame):
     # ========== ANALYSES PAR DIMENSION ==========
     try:
         df_temp = df.copy()
+        
+        # Vérifier que colonne Churn existe
+        if 'Churn' not in df_temp.columns:
+            st.error("❌ Colonne 'Churn' manquante dans les données")
+            st.info("Colonnes disponibles: " + ", ".join(df_temp.columns.tolist()[:10]))
+            return
+            
         df_temp['Is_Churned'] = (df_temp['Churn'] == 'Yes').astype(int)
         
         # 1. ANALYSE GÉOGRAPHIQUE
@@ -2511,28 +2518,43 @@ def render_action_plan_tab(df: pd.DataFrame):
         
         top3_cities = city_stats.head(3)
         
-        # 2. ANALYSE COMPORTEMENTALE
+        # 2. ANALYSE COMPORTEMENTALE (sans lambda)
         if 'Contract' in df.columns:
-            contract_churn = df.groupby('Contract')['Churn'].apply(lambda x: (x=='Yes').sum() / len(x) * 100).sort_values(ascending=False)
-            top_contract = contract_churn.index[0] if len(contract_churn) > 0 else "Month-to-month"
-            top_contract_rate = contract_churn.iloc[0] if len(contract_churn) > 0 else 42
+            contract_stats = df_temp.groupby('Contract', as_index=False).agg({
+                'customerID': 'count',
+                'Is_Churned': 'sum'
+            })
+            contract_stats['Churn_Rate'] = (contract_stats['Is_Churned'] / contract_stats['customerID'] * 100)
+            contract_stats = contract_stats.sort_values('Churn_Rate', ascending=False)
+            top_contract = contract_stats.iloc[0]['Contract'] if len(contract_stats) > 0 else "Month-to-month"
+            top_contract_rate = contract_stats.iloc[0]['Churn_Rate'] if len(contract_stats) > 0 else 42
         else:
             top_contract = "Month-to-month"
             top_contract_rate = 42
             
         if 'Internet Service' in df.columns:
-            internet_churn = df.groupby('Internet Service')['Churn'].apply(lambda x: (x=='Yes').sum() / len(x) * 100).sort_values(ascending=False)
-            top_internet = internet_churn.index[0] if len(internet_churn) > 0 else "Fiber optic"
-            top_internet_rate = internet_churn.iloc[0] if len(internet_churn) > 0 else 42
+            internet_stats = df_temp.groupby('Internet Service', as_index=False).agg({
+                'customerID': 'count',
+                'Is_Churned': 'sum'
+            })
+            internet_stats['Churn_Rate'] = (internet_stats['Is_Churned'] / internet_stats['customerID'] * 100)
+            internet_stats = internet_stats.sort_values('Churn_Rate', ascending=False)
+            top_internet = internet_stats.iloc[0]['Internet Service'] if len(internet_stats) > 0 else "Fiber optic"
+            top_internet_rate = internet_stats.iloc[0]['Churn_Rate'] if len(internet_stats) > 0 else 42
         else:
             top_internet = "Fiber optic"
             top_internet_rate = 42
             
-        # 3. ANALYSE SATISFACTION
+        # 3. ANALYSE SATISFACTION (sans lambda)
         if 'Tech Support' in df.columns:
-            support_churn = df.groupby('Tech Support')['Churn'].apply(lambda x: (x=='Yes').sum() / len(x) * 100).sort_values(ascending=False)
-            worst_support = support_churn.index[0] if len(support_churn) > 0 else "No"
-            worst_support_rate = support_churn.iloc[0] if len(support_churn) > 0 else 41
+            support_stats = df_temp.groupby('Tech Support', as_index=False).agg({
+                'customerID': 'count',
+                'Is_Churned': 'sum'
+            })
+            support_stats['Churn_Rate'] = (support_stats['Is_Churned'] / support_stats['customerID'] * 100)
+            support_stats = support_stats.sort_values('Churn_Rate', ascending=False)
+            worst_support = support_stats.iloc[0]['Tech Support'] if len(support_stats) > 0 else "No"
+            worst_support_rate = support_stats.iloc[0]['Churn_Rate'] if len(support_stats) > 0 else 41
         else:
             worst_support = "No"
             worst_support_rate = 41
@@ -2544,7 +2566,10 @@ def render_action_plan_tab(df: pd.DataFrame):
         total_pertes = total_churned * 3500
         
     except Exception as e:
+        import traceback
         st.error(f"❌ Erreur analyse: {str(e)}")
+        with st.expander("🔍 Détails techniques (pour debugging)"):
+            st.code(traceback.format_exc())
         return
     
     # ========== 1. ROADMAP INTERVENTIONS ==========
