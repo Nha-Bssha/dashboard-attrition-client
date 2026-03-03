@@ -1527,16 +1527,35 @@ def render_cost_tab(df: pd.DataFrame):
                     })
                     geo_pertes.columns = ['City', 'Churned']
                     geo_pertes['Pertes'] = geo_pertes['Churned'] * CLTV_REFERENCE
-                    geo_pertes = geo_pertes.nlargest(10, 'Pertes')  # Top 10 villes
                     
-                    # Créer Treemap géo
+                    # Top 9 villes (pas 10) pour laisser place à "Autres"
+                    geo_top9 = geo_pertes.nlargest(9, 'Pertes')
+                    
+                    # Calculer "Autres villes" (pour atteindre 100%)
+                    pertes_top9 = geo_top9['Pertes'].sum()
+                    pertes_autres = pertes_totales - pertes_top9
+                    churned_autres = int(pertes_autres / CLTV_REFERENCE) if CLTV_REFERENCE > 0 else 0
+                    
+                    # Ajouter ligne "Autres" si nécessaire
+                    if pertes_autres > 0:
+                        autres_row = pd.DataFrame({
+                            'City': ['Autres villes'],
+                            'Churned': [churned_autres],
+                            'Pertes': [pertes_autres]
+                        })
+                        geo_final = pd.concat([geo_top9, autres_row], ignore_index=True)
+                    else:
+                        # Si moins de 10 villes au total, afficher toutes
+                        geo_final = geo_pertes
+                    
+                    # Créer Treemap géo avec 100% garanti
                     fig_geo = go.Figure(go.Treemap(
-                        labels=['Total'] + geo_pertes['City'].tolist(),
-                        parents=[''] + ['Total'] * len(geo_pertes),
-                        values=[pertes_totales] + geo_pertes['Pertes'].tolist(),
+                        labels=['Total'] + geo_final['City'].tolist(),
+                        parents=[''] + ['Total'] * len(geo_final),
+                        values=[pertes_totales] + geo_final['Pertes'].tolist(),
                         text=['Total<br>$' + f'{pertes_totales:,.0f}'] + 
                              [f"{row['City']}<br>${row['Pertes']:,.0f}<br>{row['Pertes']/pertes_totales*100:.1f}%" 
-                              for _, row in geo_pertes.iterrows()],
+                              for _, row in geo_final.iterrows()],
                         textposition='middle center',
                         marker=dict(
                             colorscale='Reds',
@@ -1552,6 +1571,11 @@ def render_cost_tab(df: pd.DataFrame):
                     )
                     
                     st.plotly_chart(fig_geo, use_container_width=True)
+                    
+                    # Note si "Autres" présent
+                    if pertes_autres > 0:
+                        nb_autres_villes = len(geo_pertes) - 9
+                        st.caption(f"💡 Top 9 villes + {nb_autres_villes} autres regroupées")
                 else:
                     st.warning("Colonne 'City' non disponible")
             
@@ -1636,9 +1660,10 @@ def render_cost_tab(df: pd.DataFrame):
             ---
             **📌 Note importante :**
             - **Total identique** dans les 3 Treemaps : ${:,.0f}
+            - **Somme des % = 100%** dans chaque Treemap (garanti)
             - **Pas de double comptage** : Chaque client churned compte pour $3,500 une seule fois
             - **Dimensions orthogonales** : Un client = 1 ville + 1 contrat + 1 service
-            - **Pourcentages corrects** : Somme dans chaque Treemap = 100%
+            - **Géo : Top 9 + Autres** pour maintenir lisibilité tout en gardant 100%
             """.format(pertes_totales))
             
         except Exception as e:
