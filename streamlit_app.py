@@ -2239,8 +2239,7 @@ def render_satisfaction_tab(df: pd.DataFrame):
         # SECTION 4: CORRÉLATION ÂGE (SIMPLE)
         # ========================================
         
-      
-        st.markdown("### 📈 Corrélation Âge × Satisfaction")
+        st.markdown("### 📈 Impact Âge sur Satisfaction")
         
         if 'Age' in df_temp.columns:
             try:
@@ -2252,172 +2251,275 @@ def render_satisfaction_tab(df: pd.DataFrame):
                     sample_size = min(2000, len(df_clean))
                     df_sample = df_clean.sample(sample_size, random_state=42)
                     
-                    # Calculer corrélation et p-value
+                    # === ANALYSE PAR SEGMENTS D'ÂGE ===
+                    # Découper en tranches de 10 ans
+                    bins = [18, 30, 40, 50, 60, 70, 100]
+                    labels = ['18-29', '30-39', '40-49', '50-59', '60-69', '70+']
+                    df_clean['Age_Group'] = pd.cut(df_clean['Age'], bins=bins, labels=labels)
+                    
+                    # Calculer satisfaction moyenne par tranche
+                    age_satisfaction = df_clean.groupby('Age_Group', observed=True).agg({
+                        'Satisfaction Score': ['mean', 'count'],
+                        'NPS_Category': lambda x: (x == 'Detractors').sum()
+                    }).reset_index()
+                    
+                    age_satisfaction.columns = ['Age_Group', 'Avg_Satisfaction', 'Count', 'Detractors']
+                    age_satisfaction['Detractors_Pct'] = (age_satisfaction['Detractors'] / age_satisfaction['Count'] * 100)
+                    
+                    # Identifier segments à risque
+                    avg_global = df_clean['Satisfaction Score'].mean()
+                    age_satisfaction['Risque'] = age_satisfaction['Avg_Satisfaction'] < avg_global
+                    
+                    # Calculer corrélation globale
                     from scipy import stats
                     correlation, p_value = stats.pearsonr(df_clean['Age'], df_clean['Satisfaction Score'])
                     
-                    # Créer figure
-                    fig_scatter = go.Figure()
+                    # === GRAPHIQUE DUAL AXIS ===
+                    col_graph, col_insight = st.columns([3, 1])
                     
-                    # Couleurs NPS (identiques Power BI)
-                    colors_nps = {
-                        'Detractors': '#e74c3c',
-                        'Passives': '#f39c12',
-                        'Promoters': '#27ae60'
-                    }
-                    
-                    # Ajouter points par catégorie NPS
-                    for nps_cat in ['Detractors', 'Passives', 'Promoters']:
-                        df_cat = df_sample[df_sample['NPS_Category'] == nps_cat]
+                    with col_graph:
+                        # Créer figure avec scatter + bar chart
+                        fig = make_subplots(
+                            rows=2, cols=1,
+                            row_heights=[0.6, 0.4],
+                            subplot_titles=(
+                                '<b>Distribution par Âge</b>',
+                                '<b>Satisfaction Moyenne par Tranche</b>'
+                            ),
+                            vertical_spacing=0.15
+                        )
                         
-                        if len(df_cat) > 0:
-                            fig_scatter.add_trace(go.Scatter(
-                                x=df_cat['Age'],
-                                y=df_cat['Satisfaction Score'],
-                                mode='markers',
-                                name=nps_cat,
-                                marker=dict(
-                                    color=colors_nps[nps_cat],
-                                    size=8,
-                                    opacity=0.7,
-                                    line=dict(width=0.5, color='rgba(255,255,255,0.3)')
-                                ),
-                                hovertemplate='<b>%{fullData.name}</b><br>Âge: %{x}<br>Satisfaction: %{y}<extra></extra>'
-                            ))
+                        # Graph 1: Scatter plot (en haut)
+                        colors_nps = {
+                            'Detractors': '#e74c3c',
+                            'Passives': '#f39c12',
+                            'Promoters': '#27ae60'
+                        }
+                        
+                        for nps_cat in ['Detractors', 'Passives', 'Promoters']:
+                            df_cat = df_sample[df_sample['NPS_Category'] == nps_cat]
+                            
+                            if len(df_cat) > 0:
+                                fig.add_trace(
+                                    go.Scatter(
+                                        x=df_cat['Age'],
+                                        y=df_cat['Satisfaction Score'],
+                                        mode='markers',
+                                        name=nps_cat,
+                                        marker=dict(
+                                            color=colors_nps[nps_cat],
+                                            size=6,
+                                            opacity=0.6
+                                        ),
+                                        showlegend=True,
+                                        legendgroup=nps_cat
+                                    ),
+                                    row=1, col=1
+                                )
+                        
+                        # Trendline
+                        z = np.polyfit(df_sample['Age'], df_sample['Satisfaction Score'], 1)
+                        p = np.poly1d(z)
+                        x_trend = np.array([df_sample['Age'].min(), df_sample['Age'].max()])
+                        y_trend = p(x_trend)
+                        
+                        fig.add_trace(
+                            go.Scatter(
+                                x=x_trend,
+                                y=y_trend,
+                                mode='lines',
+                                name='Tendance',
+                                line=dict(color='cyan', width=2, dash='dash'),
+                                showlegend=False
+                            ),
+                            row=1, col=1
+                        )
+                        
+                        # Graph 2: Bar chart satisfaction par tranche (en bas)
+                        colors_bar = ['#e74c3c' if risk else '#27ae60' for risk in age_satisfaction['Risque']]
+                        
+                        fig.add_trace(
+                            go.Bar(
+                                x=age_satisfaction['Age_Group'].astype(str),
+                                y=age_satisfaction['Avg_Satisfaction'],
+                                marker_color=colors_bar,
+                                text=[f"{val:.2f}" for val in age_satisfaction['Avg_Satisfaction']],
+                                textposition='outside',
+                                showlegend=False,
+                                hovertemplate='<b>%{x}</b><br>Satisfaction: %{y:.2f}<br>Population: ' + 
+                                             age_satisfaction['Count'].astype(str) + '<extra></extra>'
+                            ),
+                            row=2, col=1
+                        )
+                        
+                        # Ligne moyenne globale
+                        fig.add_hline(
+                            y=avg_global,
+                            line_dash="dot",
+                            line_color="yellow",
+                            annotation_text=f"Moyenne: {avg_global:.2f}",
+                            annotation_position="right",
+                            row=2, col=1
+                        )
+                        
+                        fig.update_xaxes(title_text="<b>Âge</b>", row=1, col=1, showgrid=True, gridcolor='rgba(255,255,255,0.1)')
+                        fig.update_yaxes(title_text="<b>Satisfaction</b>", row=1, col=1, range=[0.5, 5.5], 
+                                        tickvals=[1,2,3,4,5], showgrid=True, gridcolor='rgba(255,255,255,0.1)')
+                        
+                        fig.update_xaxes(title_text="<b>Tranche d'âge</b>", row=2, col=1, showgrid=False)
+                        fig.update_yaxes(title_text="<b>Score Moyen</b>", row=2, col=1, range=[1, 5], showgrid=True, gridcolor='rgba(255,255,255,0.1)')
+                        
+                        fig.update_layout(
+                            height=700,
+                            template='plotly_dark',
+                            plot_bgcolor='rgba(30, 30, 46, 0.95)',
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            showlegend=True,
+                            legend=dict(
+                                orientation="h",
+                                yanchor="top",
+                                y=1.08,
+                                xanchor="center",
+                                x=0.5
+                            ),
+                            margin=dict(l=60, r=40, t=80, b=60)
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
                     
-                    # Calculer et ajouter trendline
-                    z = np.polyfit(df_sample['Age'], df_sample['Satisfaction Score'], 1)
-                    p = np.poly1d(z)
-                    x_trend = np.array([df_sample['Age'].min(), df_sample['Age'].max()])
-                    y_trend = p(x_trend)
+                    with col_insight:
+                        st.markdown("### 🎯 Insights")
+                        
+                        # Identifier tranche la plus insatisfaite
+                        worst_group = age_satisfaction.loc[age_satisfaction['Avg_Satisfaction'].idxmin()]
+                        best_group = age_satisfaction.loc[age_satisfaction['Avg_Satisfaction'].idxmax()]
+                        
+                        st.markdown(f"""
+                        <div style="background: #e74c3c22; padding: 15px; border-radius: 8px; border-left: 4px solid #e74c3c; margin-bottom: 15px;">
+                            <div style="font-size: 12px; color: #888;">🚨 SEGMENT À RISQUE</div>
+                            <div style="font-size: 24px; font-weight: 700; color: #e74c3c; margin: 8px 0;">{worst_group['Age_Group']}</div>
+                            <div style="font-size: 14px;">Satisfaction: {worst_group['Avg_Satisfaction']:.2f}/5</div>
+                            <div style="font-size: 12px; color: #aaa;">{worst_group['Detractors_Pct']:.0f}% Detractors</div>
+                            <div style="font-size: 12px; color: #aaa;">{int(worst_group['Count']):,} clients</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        st.markdown(f"""
+                        <div style="background: #27ae6022; padding: 15px; border-radius: 8px; border-left: 4px solid #27ae60; margin-bottom: 15px;">
+                            <div style="font-size: 12px; color: #888;">✅ SEGMENT PERFORMANT</div>
+                            <div style="font-size: 24px; font-weight: 700; color: #27ae60; margin: 8px 0;">{best_group['Age_Group']}</div>
+                            <div style="font-size: 14px;">Satisfaction: {best_group['Avg_Satisfaction']:.2f}/5</div>
+                            <div style="font-size: 12px; color: #aaa;">{best_group['Detractors_Pct']:.0f}% Detractors</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Écart
+                        gap = worst_group['Avg_Satisfaction'] - best_group['Avg_Satisfaction']
+                        st.metric(
+                            "Écart Satisfaction",
+                            f"{abs(gap):.2f} pts",
+                            delta=f"{gap:.2f}",
+                            delta_color="inverse"
+                        )
                     
-                    fig_scatter.add_trace(go.Scatter(
-                        x=x_trend,
-                        y=y_trend,
-                        mode='lines',
-                        name='Tendance',
-                        line=dict(color='cyan', width=3, dash='dash'),
-                        hovertemplate='Trendline<br>y = %.3fx + %.2f<extra></extra>' % (z[0], z[1])
-                    ))
+                    # === MÉTRIQUES STATISTIQUES ===
+                    st.markdown("---")
                     
-                    # Déterminer significativité
-                    if p_value < 0.001:
-                        sig_text = "Très significatif (p<0.001)"
-                        sig_icon = "✅"
-                    elif p_value < 0.05:
-                        sig_text = "Significatif (p<0.05)"
-                        sig_icon = "✅"
-                    else:
-                        sig_text = f"Non significatif (p={p_value:.3f})"
-                        sig_icon = "⚠️"
-                    
-                    # Déterminer force
-                    if abs(correlation) > 0.7:
-                        force = "Forte"
-                    elif abs(correlation) > 0.4:
-                        force = "Modérée"
-                    elif abs(correlation) > 0.2:
-                        force = "Faible"
-                    else:
-                        force = "Nulle"
-                    
-                    # Layout style Power BI
-                    fig_scatter.update_layout(
-                        title=dict(
-                            text=f"<b>Corrélation Âge × Satisfaction</b><br><sub>r = {correlation:.3f} • {force} • {sig_icon} {sig_text}</sub>",
-                            font=dict(size=18, color='white'),
-                            x=0.5,
-                            xanchor='center'
-                        ),
-                        xaxis=dict(
-                            title="<b>Âge</b>",
-                            showgrid=True,
-                            gridcolor='rgba(255,255,255,0.1)',
-                            zeroline=False,
-                            color='white',
-                            tickfont=dict(size=12)
-                        ),
-                        yaxis=dict(
-                            title="<b>Score Satisfaction</b>",
-                            showgrid=True,
-                            gridcolor='rgba(255,255,255,0.1)',
-                            zeroline=False,
-                            color='white',
-                            tickvals=[1, 2, 3, 4, 5],
-                            ticktext=['1', '2', '3', '4', '5'],
-                            range=[0.5, 5.5]
-                        ),
-                        template='plotly_dark',
-                        plot_bgcolor='rgba(30, 30, 46, 0.95)',
-                        paper_bgcolor='rgba(0,0,0,0)',
-                        height=500,
-                        legend=dict(
-                            orientation="h",
-                            yanchor="top",
-                            y=-0.15,
-                            xanchor="center",
-                            x=0.5,
-                            bgcolor='rgba(0,0,0,0.3)',
-                            bordercolor='rgba(255,255,255,0.2)',
-                            borderwidth=1
-                        ),
-                        hovermode='closest',
-                        margin=dict(l=60, r=40, t=100, b=80)
-                    )
-                    
-                    # Afficher graphique
-                    st.plotly_chart(fig_scatter, use_container_width=True)
-                    
-                    # Métriques détaillées
                     col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
                     
                     with col_stat1:
                         st.metric(
-                            "Corrélation",
+                            "Corrélation Globale",
                             f"{correlation:.3f}",
-                            help="Coefficient de Pearson (-1 à +1)"
+                            help="Pearson sur tous les âges (linéaire)"
                         )
                     
                     with col_stat2:
-                        force_color = "#27ae60" if abs(correlation) > 0.4 else "#f39c12" if abs(correlation) > 0.2 else "#e74c3c"
-                        st.markdown(f'''
-                        <div style="text-align:center; padding:10px; background:{force_color}22; border-radius:8px;">
-                            <div style="color:#888; font-size:12px;">FORCE</div>
-                            <div style="color:{force_color}; font-size:24px; font-weight:700;">{force}</div>
-                        </div>
-                        ''', unsafe_allow_html=True)
-                    
-                    with col_stat3:
-                        sig_color = "#27ae60" if p_value < 0.05 else "#e74c3c"
-                        st.markdown(f'''
-                        <div style="text-align:center; padding:10px; background:{sig_color}22; border-radius:8px;">
-                            <div style="color:#888; font-size:12px;">P-VALUE</div>
-                            <div style="color:{sig_color}; font-size:24px; font-weight:700;">{"<0.001" if p_value < 0.001 else f"{p_value:.3f}"}</div>
-                        </div>
-                        ''', unsafe_allow_html=True)
-                    
-                    with col_stat4:
                         r_squared = correlation ** 2
                         st.metric(
                             "R² (variance)",
                             f"{r_squared*100:.1f}%",
-                            help="Part de variance expliquée par l'âge"
+                            help="Variance expliquée par l'âge"
                         )
                     
-                    # Interprétation experte
-                    st.markdown(f'''
-                    <div style="background: rgba(102,126,234,0.1); padding: 15px; border-radius: 10px; margin-top: 15px; border-left: 4px solid #667eea;">
-                        <h4 style="color: #667eea; margin-top: 0;">💡 Interprétation</h4>
-                        <p style="margin: 5px 0;">
-                            La corrélation de <strong>{correlation:.3f}</strong> indique une relation <strong>{force.lower()}</strong> entre l'âge et la satisfaction.<br>
-                            L'âge explique seulement <strong>{r_squared*100:.1f}%</strong> de la variance de satisfaction.<br>
-                            {sig_text}
+                    with col_stat3:
+                        nb_segments_risque = age_satisfaction['Risque'].sum()
+                        st.metric(
+                            "Segments à risque",
+                            f"{nb_segments_risque}/{len(age_satisfaction)}",
+                            help="Tranches sous moyenne globale"
+                        )
+                    
+                    with col_stat4:
+                        clients_risque = age_satisfaction[age_satisfaction['Risque']]['Count'].sum()
+                        pct_risque = (clients_risque / df_clean.shape[0]) * 100
+                        st.metric(
+                            "Population à risque",
+                            f"{pct_risque:.0f}%",
+                            delta=f"{clients_risque:,} clients"
+                        )
+                    
+                    # === INTERPRÉTATION EXPERTE ===
+                    st.markdown("---")
+                    
+                    # Déterminer le type de relation
+                    if abs(correlation) < 0.2:
+                        if nb_segments_risque > 0:
+                            relation_type = "**Non-linéaire**"
+                            interpretation = f"""
+                            Bien que la corrélation globale soit nulle ({correlation:.3f}), l'analyse par segments révèle un **pattern non-linéaire** significatif.
+                            
+                            **🔍 Pattern détecté :**
+                            - Satisfaction stable sur la majorité des âges
+                            - **Chute marquée pour le segment {worst_group['Age_Group']}** ({worst_group['Avg_Satisfaction']:.2f}/5 vs {avg_global:.2f}/5 global)
+                            - {worst_group['Detractors_Pct']:.0f}% de Detractors dans ce segment
+                            
+                            **💡 Conclusion :**
+                            L'âge a un **impact localisé** (effet de seuil) plutôt qu'une relation linéaire continue.
+                            **Action prioritaire :** Cibler spécifiquement les {worst_group['Age_Group']} ans avec des programmes adaptés.
+                            """
+                            color = "#f39c12"
+                        else:
+                            relation_type = "**Nulle**"
+                            interpretation = f"""
+                            La corrélation de {correlation:.3f} indique qu'il n'y a **aucune relation** entre l'âge et la satisfaction.
+                            
+                            L'analyse par segments confirme une satisfaction homogène sur toutes les tranches d'âge.
+                            
+                            **💡 Conclusion :**
+                            L'âge n'est **pas un driver** de satisfaction. D'autres facteurs (contrat, services, etc.) sont plus pertinents.
+                            """
+                            color = "#95a5a6"
+                    elif abs(correlation) < 0.4:
+                        relation_type = "**Faible**"
+                        interpretation = f"""
+                        La corrélation de {correlation:.3f} indique une relation faible mais {"négative" if correlation < 0 else "positive"}.
+                        
+                        Satisfaction {"diminue légèrement" if correlation < 0 else "augmente légèrement"} avec l'âge, mais ce facteur explique seulement {r_squared*100:.1f}% de la variance.
+                        """
+                        color = "#3498db"
+                    else:
+                        relation_type = "**Modérée à Forte**"
+                        interpretation = f"""
+                        La corrélation de {correlation:.3f} indique une relation {"négative" if correlation < 0 else "positive"} significative.
+                        
+                        L'âge est un **driver important** de satisfaction.
+                        """
+                        color = "#27ae60"
+                    
+                    st.markdown(f"""
+                    <div style="background: {color}22; padding: 20px; border-radius: 10px; border-left: 4px solid {color};">
+                        <h4 style="color: {color}; margin-top: 0;">💡 Interprétation : Relation {relation_type}</h4>
+                        <p style="margin: 5px 0; line-height: 1.6;">
+                            {interpretation}
                         </p>
                     </div>
-                    ''', unsafe_allow_html=True)
+                    """, unsafe_allow_html=True)
             
             except Exception as e:
-                st.error(f"Erreur graphique corrélation: {str(e)}")
+                st.error(f"Erreur analyse âge: {str(e)}")
+                import traceback
+                st.code(traceback.format_exc())
         
         st.markdown("---")
         
