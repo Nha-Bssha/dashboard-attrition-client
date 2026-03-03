@@ -19,8 +19,8 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from scipy.stats import chi2_contingency
-from scipy import stats
+import re
+from collections import Counter
 from plotly.subplots import make_subplots
 from typing import Tuple, Optional, Dict, List
 import warnings
@@ -1338,9 +1338,7 @@ def render_overview_tab(df: pd.DataFrame):
 def render_behavior_tab(df: pd.DataFrame):
     """
     Onglet Comportement - Niveau Expert 10/10
-    • Interactivité pédagogique (calculateurs, sélecteurs)
-    • Tests statistiques (Chi², p-values, IC 95%)
-    • Drill-down et exploration
+    Interactivité pédagogique + Tests statistiques + Drill-down
     """
     st.markdown('<h2 class="sub-title">📊 Analyse Comportementale du Churn</h2>', 
                 unsafe_allow_html=True)
@@ -1350,7 +1348,8 @@ def render_behavior_tab(df: pd.DataFrame):
                 padding: 20px; border-radius: 10px; margin-bottom: 30px;">
         <h3 style="color: white; margin: 0;">💡 Insight Clé</h3>
         <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
-            Les clients Month-to-month ont 15x plus de churn (p<0.001). Tech Support réduit le churn de 63% (χ²=892).
+            Les clients sans engagement (Month-to-month) ont un taux de churn 15x supérieur aux contrats 2 ans (p<0.001). 
+            L'absence de Tech Support multiplie le risque par 2.7x (χ²=892, p<0.001).
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1367,39 +1366,41 @@ def render_behavior_tab(df: pd.DataFrame):
             st.error("❌ Colonne churn non trouvée")
             return
         
-        # === SÉLECTEUR INTERACTIF ===
+        # === SÉLECTEUR INTERACTIF DE VARIABLES ===
         st.markdown("#### 🎮 Exploration Interactive")
         
         col_select1, col_select2 = st.columns(2)
         
         with col_select1:
             available_vars = ['Contract', 'Internet Service', 'Tech Support', 
-                            'Online Security', 'Payment Method']
+                            'Online Security', 'Payment Method', 'Phone Service']
             available_vars = [v for v in available_vars if v in df_temp.columns]
             
             var1 = st.selectbox(
-                "📊 Variable à analyser",
+                "📊 Variable principale à analyser",
                 available_vars,
-                index=0
+                index=0,
+                help="Sélectionnez la variable comportementale à explorer"
             )
         
         with col_select2:
             other_vars = [v for v in available_vars if v != var1]
             var2 = st.selectbox(
                 "🔍 Variable de comparaison",
-                other_vars if other_vars else available_vars,
-                index=0 if other_vars else 0
+                other_vars,
+                index=min(1, len(other_vars)-1) if other_vars else 0,
+                help="Comparez avec une autre variable"
             )
         
         st.markdown("---")
         
-        # === ANALYSE VARIABLE 1 AVEC TESTS ===
-        st.markdown(f"#### 📊 {var1}")
+        # === ANALYSE VARIABLE PRINCIPALE AVEC TESTS STATS ===
+        st.markdown(f"#### 📊 Analyse : {var1}")
         
-        col_g1, col_s1 = st.columns([2, 1])
+        col_graph1, col_stats1 = st.columns([2, 1])
         
-        with col_g1:
-            # Stats
+        with col_graph1:
+            # Calculer stats avec Chi²
             var1_stats = df_temp.groupby(var1, as_index=False).agg({
                 'customerID': 'count',
                 'Is_Churned': 'sum'
@@ -1409,140 +1410,302 @@ def render_behavior_tab(df: pd.DataFrame):
             var1_stats['Retained'] = var1_stats['Total'] - var1_stats['Churned']
             var1_stats = var1_stats.sort_values('Churn_Rate', ascending=False)
             
-            # Chi²
-            contingency = var1_stats[['Churned', 'Retained']].values
-            chi2, p_value, dof, expected = chi2_contingency(contingency)
+            # Test Chi²
+            from scipy.stats import chi2_contingency
+            contingency_table = var1_stats[['Churned', 'Retained']].values
+            chi2, p_value, dof, expected = chi2_contingency(contingency_table)
             
-            # Graph
-            colors = ['#e74c3c' if r > 30 else '#f39c12' if r > 15 else '#27ae60' 
-                     for r in var1_stats['Churn_Rate']]
+            # Graphique bar chart interactif
+            fig_var1 = go.Figure()
             
-            fig = go.Figure(go.Bar(
+            colors = ['#e74c3c' if rate > 30 else '#f39c12' if rate > 15 else '#27ae60' 
+                     for rate in var1_stats['Churn_Rate']]
+            
+            fig_var1.add_trace(go.Bar(
                 x=var1_stats[var1],
                 y=var1_stats['Churn_Rate'],
-                text=[f"{r:.1f}%<br>{c:,}/{t:,}" 
-                      for r, c, t in zip(var1_stats['Churn_Rate'], 
-                                        var1_stats['Churned'],
-                                        var1_stats['Total'])],
+                text=[f"{rate:.1f}%<br>{churned:,} / {total:,}" 
+                      for rate, churned, total in zip(var1_stats['Churn_Rate'], 
+                                                      var1_stats['Churned'],
+                                                      var1_stats['Total'])],
                 textposition='outside',
-                marker_color=colors
+                marker_color=colors,
+                customdata=var1_stats[['Total', 'Churned', 'Retained']],
+                hovertemplate='<b>%{x}</b><br>' +
+                             'Taux churn: %{y:.1f}%<br>' +
+                             'Total clients: %{customdata[0]:,}<br>' +
+                             'Churned: %{customdata[1]:,}<br>' +
+                             'Retained: %{customdata[2]:,}<br>' +
+                             '<extra></extra>'
             ))
             
-            fig.update_layout(
-                title=f"{var1}<br><sub>χ²={chi2:.1f}, p={'<0.001' if p_value<0.001 else f'={p_value:.3f}'}</sub>",
+            fig_var1.update_layout(
+                title=f"Taux de Churn par {var1}<br><sub>χ²={chi2:.1f}, p={'<0.001' if p_value < 0.001 else f'={p_value:.3f}'}</sub>",
                 xaxis_title=var1,
-                yaxis_title="Churn (%)",
+                yaxis_title="Taux de Churn (%)",
                 template="plotly_dark",
-                height=400
+                height=400,
+                showlegend=False
             )
             
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig_var1, use_container_width=True)
         
-        with col_s1:
-            st.markdown("**📊 Tests Stats:**")
+        with col_stats1:
+            st.markdown("**📊 Tests Statistiques:**")
             
-            sig_color = "#27ae60" if p_value < 0.001 else "#f39c12" if p_value < 0.05 else "#e74c3c"
-            sig_text = "✅ Très sig" if p_value < 0.001 else "✅ Sig" if p_value < 0.05 else "❌ Non sig"
+            # Chi² interprétation
+            if p_value < 0.001:
+                sig_text = "✅ Très significatif"
+                sig_color = "#27ae60"
+            elif p_value < 0.05:
+                sig_text = "✅ Significatif"
+                sig_color = "#f39c12"
+            else:
+                sig_text = "❌ Non significatif"
+                sig_color = "#e74c3c"
             
             st.markdown(f"""
             <div style="background: {sig_color}22; padding: 15px; border-radius: 8px; border-left: 4px solid {sig_color};">
+                <strong>Chi² Test:</strong><br>
                 χ² = {chi2:.2f}<br>
-                p = {'<0.001' if p_value<0.001 else f'{p_value:.4f}'}<br>
+                p-value = {'<0.001' if p_value < 0.001 else f'{p_value:.4f}'}<br>
                 <strong>{sig_text}</strong>
             </div>
             """, unsafe_allow_html=True)
             
+            # Ratio de risque
             max_churn = var1_stats['Churn_Rate'].max()
             min_churn = var1_stats['Churn_Rate'].min()
-            ratio = max_churn / min_churn if min_churn > 0 else 0
+            risk_ratio = max_churn / min_churn if min_churn > 0 else 0
             
-            st.markdown(f"**Ratio:** {ratio:.1f}x")
+            st.markdown(f"""
+            **🎯 Ratio de Risque:**  
+            {risk_ratio:.1f}x entre catégories
+            
+            **📊 Distribution:**
+            """)
+            
+            for _, row in var1_stats.iterrows():
+                st.markdown(f"• {row[var1]}: {row['Churn_Rate']:.1f}% ({row['Churned']:,})")
         
-        # === CALCULATEUR INTERACTIF ===
-        with st.expander("🎮 Calculateur Impact", expanded=False):
-            st.markdown("### Simulez des scénarios")
+        # === CALCULATEUR IMPACT INTERACTIF ===
+        with st.expander("🎮 Calculateur d'Impact - Simulez des Scénarios", expanded=False):
+            st.markdown("### 💡 Simulez l'impact de changements comportementaux")
             
-            c1, c2, c3 = st.columns(3)
+            calc_col1, calc_col2, calc_col3 = st.columns(3)
             
-            with c1:
-                selected = st.selectbox("Catégorie", var1_stats[var1].tolist(), key="calc")
-                cat_data = var1_stats[var1_stats[var1]==selected].iloc[0]
-                st.metric("Population", f"{int(cat_data['Total']):,}")
-                st.metric("Churn actuel", f"{cat_data['Churn_Rate']:.1f}%")
-            
-            with c2:
-                reduction = st.slider("Réduction churn (%)", 0, 100, 30)
-                new_rate = cat_data['Churn_Rate'] * (1 - reduction/100)
-                new_churned = int(cat_data['Total'] * new_rate / 100)
-                saved = int(cat_data['Churned'] - new_churned)
+            with calc_col1:
+                # Sélection catégorie
+                selected_cat = st.selectbox(
+                    "Catégorie analysée",
+                    var1_stats[var1].tolist(),
+                    key="calc_cat"
+                )
                 
-                st.metric("Nouveau churn", f"{new_rate:.1f}%", delta=f"-{cat_data['Churn_Rate']-new_rate:.1f}%")
-                st.metric("Clients sauvés", f"{saved:,}")
+                cat_data = var1_stats[var1_stats[var1] == selected_cat].iloc[0]
+                st.metric("Population actuelle", f"{int(cat_data['Total']):,}")
+                st.metric("Taux churn actuel", f"{cat_data['Churn_Rate']:.1f}%")
             
-            with c3:
+            with calc_col2:
+                # Scénario amélioration
+                reduction_pct = st.slider(
+                    "Réduction churn ciblée (%)",
+                    0, 100, 30,
+                    help="Quelle réduction de churn visez-vous?"
+                )
+                
+                new_churn_rate = cat_data['Churn_Rate'] * (1 - reduction_pct/100)
+                new_churned = int(cat_data['Total'] * new_churn_rate / 100)
+                clients_saved = int(cat_data['Churned'] - new_churned)
+                
+                st.metric(
+                    "Nouveau taux churn",
+                    f"{new_churn_rate:.1f}%",
+                    delta=f"-{cat_data['Churn_Rate'] - new_churn_rate:.1f}%"
+                )
+                st.metric("Clients sauvés", f"{clients_saved:,}")
+            
+            with calc_col3:
+                # Impact financier
                 CLTV = 4149
-                gain = saved * CLTV
-                budget = st.number_input("Budget ($)", 0, 200000, 50000, 10000)
-                roi = ((gain - budget) / budget * 100) if budget > 0 else 0
+                gain_brut = clients_saved * CLTV
                 
-                st.metric("Gain", f"${gain:,.0f}")
-                st.metric("ROI", f"{roi:.0f}%", delta="Rentable" if roi>0 else "Non rentable")
+                budget_campagne = st.number_input(
+                    "Budget campagne ($)",
+                    min_value=0,
+                    value=50000,
+                    step=10000
+                )
+                
+                roi = ((gain_brut - budget_campagne) / budget_campagne * 100) if budget_campagne > 0 else 0
+                
+                st.metric("Gain brut", f"${gain_brut:,.0f}")
+                st.metric(
+                    "ROI campagne",
+                    f"{roi:.0f}%",
+                    delta="Rentable" if roi > 0 else "Non rentable"
+                )
         
         st.markdown("---")
         
-        # === HEATMAP CROISÉE ===
-        st.markdown(f"#### 🔍 {var1} × {var2}")
+        # === COMPARAISON CROISÉE 2 VARIABLES ===
+        st.markdown(f"#### 🔍 Analyse Croisée : {var1} × {var2}")
         
         if var2 in df_temp.columns:
-            cross = df_temp.groupby([var1, var2])['Is_Churned'].agg(['mean', 'count'])
-            cross['mean'] = cross['mean'] * 100
-            cross = cross.reset_index()
-            cross = cross[cross['count'] >= 10]
+            # Heatmap corrélation
+            cross_analysis = df_temp.groupby([var1, var2], as_index=False)['Is_Churned'].agg(['mean', 'count'])
+            cross_analysis.columns = ['Churn_Rate', 'Count']
+            cross_analysis['Churn_Rate'] = cross_analysis['Churn_Rate'] * 100
+            cross_analysis = cross_analysis.reset_index()
             
-            if len(cross) > 0:
-                pivot = cross.pivot(index=var1, columns=var2, values='mean')
+            # Filtrer pour avoir assez de données
+            cross_analysis = cross_analysis[cross_analysis['Count'] >= 10]
+            
+            if len(cross_analysis) > 0:
+                # Pivot pour heatmap
+                pivot_data = cross_analysis.pivot(index=var1, columns=var2, values='Churn_Rate')
                 
-                fig_heat = go.Figure(go.Heatmap(
-                    z=pivot.values,
-                    x=pivot.columns,
-                    y=pivot.index,
+                fig_heatmap = go.Figure(data=go.Heatmap(
+                    z=pivot_data.values,
+                    x=pivot_data.columns,
+                    y=pivot_data.index,
                     colorscale='RdYlGn_r',
-                    text=[[f"{v:.1f}%" for v in row] for row in pivot.values],
-                    texttemplate='%{text}',
+                    text=pivot_data.values,
+                    texttemplate='%{text:.1f}%',
+                    textfont={"size": 10},
                     colorbar=dict(title="Churn %")
                 ))
                 
-                fig_heat.update_layout(
-                    title=f"Heatmap: {var1} × {var2}",
+                fig_heatmap.update_layout(
+                    title=f"Heatmap Churn: {var1} × {var2}",
+                    xaxis_title=var2,
+                    yaxis_title=var1,
                     template="plotly_dark",
                     height=400
                 )
                 
-                st.plotly_chart(fig_heat, use_container_width=True)
+                st.plotly_chart(fig_heatmap, use_container_width=True)
+                
+                # Top 3 combinaisons risquées
+                top_risk = cross_analysis.nlargest(3, 'Churn_Rate')
+                
+                st.markdown("**⚠️ Top 3 Combinaisons à Risque:**")
+                cols_risk = st.columns(3)
+                for idx, (_, row) in enumerate(top_risk.iterrows()):
+                    with cols_risk[idx]:
+                        st.markdown(f"""
+                        <div style="background: #e74c3c22; padding: 10px; border-radius: 8px; border-left: 4px solid #e74c3c;">
+                            <strong>{row[var1]}</strong><br>
+                            + {row[var2]}<br>
+                            <span style="font-size: 24px; color: #e74c3c;">{row['Churn_Rate']:.1f}%</span><br>
+                            <small>{int(row['Count'])} clients</small>
+                        </div>
+                        """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # === SERVICES PROTECTION - ANALYSE DÉTAILLÉE ===
+        st.markdown("#### 🛡️ Impact Services Protection")
+        
+        protection_services = ['Tech Support', 'Online Security', 'Online Backup', 'Device Protection']
+        available_services = [s for s in protection_services if s in df_temp.columns]
+        
+        if available_services:
+            service_impact = []
+            for service in available_services:
+                df_service = df_temp[df_temp[service].isin(['Yes', 'No'])]
+                
+                if len(df_service) > 0:
+                    # Stats par service
+                    no_service = df_service[df_service[service]=='No']['Is_Churned'].mean() * 100
+                    yes_service = df_service[df_service[service]=='Yes']['Is_Churned'].mean() * 100
+                    reduction = no_service - yes_service
+                    
+                    # Chi² test
+                    contingency = pd.crosstab(df_service[service], df_service['Is_Churned'])
+                    chi2_svc, p_svc, _, _ = chi2_contingency(contingency)
+                    
+                    # Intervalle confiance (95%)
+                    from scipy import stats
+                    n_yes = len(df_service[df_service[service]=='Yes'])
+                    p_yes = yes_service / 100
+                    ci_yes = 1.96 * np.sqrt((p_yes * (1-p_yes)) / n_yes) * 100
+                    
+                    service_impact.append({
+                        'Service': service,
+                        'Sans': no_service,
+                        'Avec': yes_service,
+                        'Réduction': reduction,
+                        'Chi²': chi2_svc,
+                        'p-value': p_svc,
+                        'IC_95': ci_yes,
+                        'Pop_Sans': len(df_service[df_service[service]=='No']),
+                        'Pop_Avec': len(df_service[df_service[service]=='Yes'])
+                    })
+            
+            df_impact = pd.DataFrame(service_impact).sort_values('Réduction', ascending=False)
+            
+            # Graphique waterfall
+            fig_waterfall = go.Figure(go.Waterfall(
+                name="Impact",
+                orientation="v",
+                x=df_impact['Service'],
+                y=df_impact['Réduction'],
+                text=[f"-{r:.1f}%<br>p={'<0.001' if p<0.001 else f'={p:.3f}'}" 
+                      for r, p in zip(df_impact['Réduction'], df_impact['p-value'])],
+                textposition="outside",
+                connector={"line": {"color": "rgb(63, 63, 63)"}},
+                decreasing={"marker": {"color": "#27ae60"}},
+                increasing={"marker": {"color": "#e74c3c"}},
+            ))
+            
+            fig_waterfall.update_layout(
+                title="Réduction du Churn par Service Protection (avec significativité)",
+                yaxis_title="Réduction Taux Churn (%)",
+                template="plotly_dark",
+                height=400
+            )
+            
+            st.plotly_chart(fig_waterfall, use_container_width=True)
+            
+            # Tableau sans .style (correction bug)
+            st.markdown("**📊 Détail Services Protection:**")
+            
+            # Créer colonnes formatées manuellement
+            df_display = df_impact.copy()
+            df_display['Sans (%)'] = df_display['Sans'].apply(lambda x: f"{x:.1f}%")
+            df_display['Avec (%)'] = df_display['Avec'].apply(lambda x: f"{x:.1f}%")
+            df_display['Réduction (%)'] = df_display['Réduction'].apply(lambda x: f"{x:.1f}%")
+            df_display['Significativité'] = df_display['p-value'].apply(
+                lambda x: '✅ Très sig (p<0.001)' if x < 0.001 else '✅ Sig (p<0.05)' if x < 0.05 else '❌ Non sig'
+            )
+            df_display['IC 95%'] = df_display['IC_95'].apply(lambda x: f"±{x:.1f}%")
+            
+            st.dataframe(
+                df_display[['Service', 'Sans (%)', 'Avec (%)', 'Réduction (%)', 'Significativité', 'IC 95%', 'Pop_Sans']],
+                use_container_width=True,
+                hide_index=True
+            )
     
     except Exception as e:
-        st.error(f"❌ Erreur: {str(e)}")
-        with st.expander("🔍 Debug"):
+        st.error(f"❌ Erreur onglet Comportement: {str(e)}")
+        import traceback
+        with st.expander("🔍 Détails techniques"):
             st.code(traceback.format_exc())
-
-
-def render_satisfaction_tab(df: pd.DataFrame):
     """
-    Onglet Satisfaction - Niveau Expert 10/10
-    • Tests statistiques (T-test, Mann-Whitney)
-    • Calculateurs prédictifs
-    • Comparateurs interactifs
+    Onglet Comportement - Analyse comportements clients et impact churn
+    Basé sur données réelles du dataset (pas de benchmark)
     """
-    st.markdown('<h2 class="sub-title">😊 Analyse Satisfaction Client</h2>', 
+    st.markdown('<h2 class="sub-title">📊 Analyse Comportementale du Churn</h2>', 
                 unsafe_allow_html=True)
     
     st.markdown("""
-    <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
                 padding: 20px; border-radius: 10px; margin-bottom: 30px;">
         <h3 style="color: white; margin: 0;">💡 Insight Clé</h3>
         <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
-            Clients churned: 1.74/5 vs Retained: 3.79/5 (t=-85.2, p<0.001). 
-            Écart de 2.05 points = prédicteur #1 du churn.
+            Les clients sans engagement (Month-to-month) ont un taux de churn 15x supérieur aux contrats 2 ans. 
+            L'absence de Tech Support multiplie le risque de churn par 2.7x.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1550,7 +1713,293 @@ def render_satisfaction_tab(df: pd.DataFrame):
     try:
         df_temp = df.copy()
         
-        # Churn
+        # Créer colonne churn
+        if 'Churn Label' in df_temp.columns:
+            df_temp['Is_Churned'] = (df_temp['Churn Label'] == 'Yes').astype(int)
+        elif 'Churn' in df_temp.columns:
+            df_temp['Is_Churned'] = (df_temp['Churn'] == 'Yes').astype(int)
+        else:
+            st.error("❌ Colonne churn non trouvée")
+            return
+        
+        # === KPIs PRINCIPAUX ===
+        st.markdown("#### 🎯 Indicateurs Comportementaux Clés")
+        
+        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+        
+        # KPI 1: Contrat Month-to-month
+        if 'Contract' in df_temp.columns:
+            m2m_churn = df_temp[df_temp['Contract']=='Month-to-month']['Is_Churned'].mean() * 100
+            kpi1.metric(
+                "Churn Month-to-month",
+                f"{m2m_churn:.1f}%",
+                delta=f"+{m2m_churn-26.5:.1f}% vs global",
+                delta_color="inverse"
+            )
+        
+        # KPI 2: Impact Tech Support
+        if 'Tech Support' in df_temp.columns:
+            no_support = df_temp[df_temp['Tech Support']=='No']['Is_Churned'].mean() * 100
+            yes_support = df_temp[df_temp['Tech Support']=='Yes']['Is_Churned'].mean() * 100
+            reduction = ((no_support - yes_support) / no_support * 100)
+            kpi2.metric(
+                "Réduction via Tech Support",
+                f"-{reduction:.0f}%",
+                delta="Protection majeure",
+                delta_color="normal"
+            )
+        
+        # KPI 3: Fiber optic problem
+        if 'Internet Service' in df_temp.columns:
+            fiber_churn = df_temp[df_temp['Internet Service']=='Fiber optic']['Is_Churned'].mean() * 100
+            kpi3.metric(
+                "Churn Fiber Optic",
+                f"{fiber_churn:.1f}%",
+                delta="Problème qualité?",
+                delta_color="inverse"
+            )
+        
+        # KPI 4: Electronic check risk
+        if 'Payment Method' in df_temp.columns:
+            echeck_churn = df_temp[df_temp['Payment Method']=='Electronic check']['Is_Churned'].mean() * 100
+            kpi4.metric(
+                "Churn Electronic Check",
+                f"{echeck_churn:.1f}%",
+                delta="Friction paiement",
+                delta_color="inverse"
+            )
+        
+        st.markdown("---")
+        
+        # === SECTION 1: TYPE DE CONTRAT ===
+        st.markdown("#### 📝 Impact Type de Contrat")
+        
+        col_contract1, col_contract2 = st.columns([2, 1])
+        
+        with col_contract1:
+            if 'Contract' in df_temp.columns:
+                # Analyse par contrat
+                contract_stats = df_temp.groupby('Contract', as_index=False).agg({
+                    'customerID': 'count',
+                    'Is_Churned': 'sum'
+                })
+                contract_stats.columns = ['Contract', 'Total', 'Churned']
+                contract_stats['Churn_Rate'] = (contract_stats['Churned'] / contract_stats['Total'] * 100)
+                contract_stats = contract_stats.sort_values('Churn_Rate', ascending=False)
+                
+                # Graphique bar chart
+                fig_contract = go.Figure()
+                
+                colors = ['#e74c3c' if rate > 30 else '#f39c12' if rate > 15 else '#27ae60' 
+                         for rate in contract_stats['Churn_Rate']]
+                
+                fig_contract.add_trace(go.Bar(
+                    x=contract_stats['Contract'],
+                    y=contract_stats['Churn_Rate'],
+                    text=[f"{rate:.1f}%<br>{churned:,} clients" 
+                          for rate, churned in zip(contract_stats['Churn_Rate'], contract_stats['Churned'])],
+                    textposition='outside',
+                    marker_color=colors,
+                    hovertemplate='<b>%{x}</b><br>Taux: %{y:.1f}%<extra></extra>'
+                ))
+                
+                fig_contract.update_layout(
+                    title="Taux de Churn par Type de Contrat",
+                    xaxis_title="Type de Contrat",
+                    yaxis_title="Taux de Churn (%)",
+                    template="plotly_dark",
+                    height=400,
+                    showlegend=False
+                )
+                
+                st.plotly_chart(fig_contract, use_container_width=True)
+        
+        with col_contract2:
+            st.markdown("**💡 Insights:**")
+            st.markdown(f"""
+            - **Month-to-month:** {contract_stats[contract_stats['Contract']=='Month-to-month']['Churn_Rate'].values[0]:.1f}% churn
+            - **One year:** {contract_stats[contract_stats['Contract']=='One year']['Churn_Rate'].values[0]:.1f}% churn  
+            - **Two year:** {contract_stats[contract_stats['Contract']=='Two year']['Churn_Rate'].values[0]:.1f}% churn
+            
+            **📈 Ratio de risque:**  
+            M2M vs 2 ans = {(contract_stats[contract_stats['Contract']=='Month-to-month']['Churn_Rate'].values[0] / contract_stats[contract_stats['Contract']=='Two year']['Churn_Rate'].values[0]):.1f}x
+            
+            **🎯 Recommandation:**  
+            Inciter contrats longs (offres, réductions)
+            """)
+        
+        st.markdown("---")
+        
+        # === SECTION 2: SERVICES PROTECTION ===
+        st.markdown("#### 🛡️ Impact Services Protection")
+        
+        protection_services = ['Tech Support', 'Online Security', 'Online Backup', 'Device Protection']
+        available_services = [s for s in protection_services if s in df_temp.columns]
+        
+        if available_services:
+            # Calculer impact de chaque service
+            service_impact = []
+            for service in available_services:
+                # Filtrer pour avoir seulement Yes/No (exclure "No internet service")
+                df_service = df_temp[df_temp[service].isin(['Yes', 'No'])]
+                
+                if len(df_service) > 0:
+                    no_service = df_service[df_service[service]=='No']['Is_Churned'].mean() * 100
+                    yes_service = df_service[df_service[service]=='Yes']['Is_Churned'].mean() * 100
+                    reduction = no_service - yes_service
+                    
+                    service_impact.append({
+                        'Service': service,
+                        'Sans Service': no_service,
+                        'Avec Service': yes_service,
+                        'Réduction': reduction,
+                        'Population_Non': len(df_service[df_service[service]=='No']),
+                        'Population_Oui': len(df_service[df_service[service]=='Yes'])
+                    })
+            
+            df_impact = pd.DataFrame(service_impact).sort_values('Réduction', ascending=False)
+            
+            # Graphique waterfall impact cumulé
+            fig_waterfall = go.Figure(go.Waterfall(
+                name="Impact",
+                orientation="v",
+                x=df_impact['Service'],
+                y=df_impact['Réduction'],
+                text=[f"-{r:.1f}%" for r in df_impact['Réduction']],
+                textposition="outside",
+                connector={"line": {"color": "rgb(63, 63, 63)"}},
+                decreasing={"marker": {"color": "#27ae60"}},
+                increasing={"marker": {"color": "#e74c3c"}},
+                totals={"marker": {"color": "#3498db"}}
+            ))
+            
+            fig_waterfall.update_layout(
+                title="Réduction du Churn par Service Protection",
+                yaxis_title="Réduction Taux Churn (%)",
+                template="plotly_dark",
+                height=400
+            )
+            
+            st.plotly_chart(fig_waterfall, use_container_width=True)
+            
+            # Tableau détaillé
+            st.markdown("**📊 Détail Services Protection:**")
+            st.dataframe(
+                df_impact[['Service', 'Sans Service', 'Avec Service', 'Réduction', 'Population_Non']].style.format({
+                    'Sans Service': '{:.1f}%',
+                    'Avec Service': '{:.1f}%',
+                    'Réduction': '{:.1f}%',
+                    'Population_Non': '{:,.0f}'
+                }).background_gradient(subset=['Réduction'], cmap='RdYlGn'),
+                use_container_width=True,
+                hide_index=True
+            )
+        
+        st.markdown("---")
+        
+        # === SECTION 3: PAYMENT METHOD ===
+        st.markdown("#### 💳 Impact Méthode de Paiement")
+        
+        if 'Payment Method' in df_temp.columns:
+            payment_stats = df_temp.groupby('Payment Method', as_index=False).agg({
+                'customerID': 'count',
+                'Is_Churned': 'sum'
+            })
+            payment_stats.columns = ['Payment', 'Total', 'Churned']
+            payment_stats['Churn_Rate'] = (payment_stats['Churned'] / payment_stats['Total'] * 100)
+            payment_stats = payment_stats.sort_values('Churn_Rate', ascending=True)
+            
+            # Graphique horizontal bar
+            fig_payment = go.Figure(go.Bar(
+                x=payment_stats['Churn_Rate'],
+                y=payment_stats['Payment'],
+                orientation='h',
+                text=[f"{rate:.1f}%" for rate in payment_stats['Churn_Rate']],
+                textposition='outside',
+                marker_color=['#27ae60' if 'automatic' in p.lower() else '#e74c3c' if 'check' in p.lower() else '#f39c12' 
+                             for p in payment_stats['Payment']],
+                hovertemplate='<b>%{y}</b><br>Churn: %{x:.1f}%<extra></extra>'
+            ))
+            
+            fig_payment.update_layout(
+                title="Taux de Churn par Méthode de Paiement",
+                xaxis_title="Taux de Churn (%)",
+                yaxis_title="",
+                template="plotly_dark",
+                height=350
+            )
+            
+            st.plotly_chart(fig_payment, use_container_width=True)
+            
+            st.info("""
+            💡 **Insight:** Les paiements automatiques (Bank transfer, Credit card) réduisent le churn de ~66% vs Electronic check.  
+            **Recommandation:** Programme d'incitation aux paiements automatiques.
+            """)
+        
+        # === MÉTHODOLOGIE ===
+        with st.expander("🔬 Méthodologie & Tests Statistiques"):
+            st.markdown("""
+            ### Méthodes utilisées:
+            
+            **1. Taux de churn par catégorie:**
+            - Formule: (Churned / Total) × 100
+            - Seuils: <15% bon, 15-30% moyen, >30% critique
+            
+            **2. Ratio de risque:**
+            - Formule: Churn_Catégorie_A / Churn_Catégorie_B
+            - Interprétation: >2x = risque significativement élevé
+            
+            **3. Réduction via service:**
+            - Formule: (Churn_Sans - Churn_Avec) / Churn_Sans × 100
+            - Mesure l'effet protecteur du service
+            
+            **4. Populations:**
+            - Analyse complète (7,043 clients)
+            - Filtre services: Exclusion "No internet service" pour calculs comparatifs
+            
+            **Tests à implémenter (prochaine itération):**
+            - Chi² indépendance (Contract × Churn)
+            - Régression logistique (Impact multivarié)
+            - ANOVA (Différences moyennes)
+            """)
+    
+    except Exception as e:
+        st.error(f"❌ Erreur onglet Comportement: {str(e)}")
+        import traceback
+        with st.expander("🔍 Détails techniques"):
+            st.code(traceback.format_exc())
+
+def render_satisfaction_tab(df: pd.DataFrame):
+    """
+    Onglet Satisfaction - Dashboard Visuel Impactant
+    
+    Sections:
+    1. NPS Géant (Gauge + Décomposition)
+    2. NPS par Segment (Bars horizontales)
+    3. Top 5 Raisons + Mots-Clés (Paint Points)
+    4. Corrélation Âge × Satisfaction (Scatter + Trendline)
+    5. NPS vs Churn Rate (Preuve Causale)
+    6. Insights Automatiques
+    """
+    
+    st.markdown('<h2 class="sub-title">😊 Satisfaction Client - Vue Executive</h2>', 
+                unsafe_allow_html=True)
+    
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
+                padding: 20px; border-radius: 10px; margin-bottom: 30px;">
+        <h3 style="color: white; margin: 0;">💡 Dashboard NPS & Insights</h3>
+        <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+            Visualisez instantanément la satisfaction client et les raisons de départ.
+            Tous les insights basés sur vos données réelles.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    try:
+        df_temp = df.copy()
+        
+        # Préparer données
         if 'Churn Label' in df_temp.columns:
             df_temp['Is_Churned'] = (df_temp['Churn Label'] == 'Yes').astype(int)
         elif 'Churn' in df_temp.columns:
@@ -1563,198 +2012,483 @@ def render_satisfaction_tab(df: pd.DataFrame):
             st.warning("⚠️ Colonne 'Satisfaction Score' manquante")
             return
         
-        # === TESTS STATISTIQUES ===
-        sat_churned = df_temp[df_temp['Is_Churned']==1]['Satisfaction Score']
-        sat_retained = df_temp[df_temp['Is_Churned']==0]['Satisfaction Score']
+        # === CALCUL NPS ===
+        # Adapter échelle 1-5 au NPS standard
+        # Promoters (4-5) | Passives (3) | Detractors (1-2)
+        df_temp['NPS_Category'] = df_temp['Satisfaction Score'].apply(
+            lambda x: 'Promoters' if x >= 4 else ('Passives' if x == 3 else 'Detractors')
+        )
         
-        # T-test
-        t_stat, t_pvalue = stats.ttest_ind(sat_churned, sat_retained)
+        total_clients = len(df_temp)
+        promoters_count = (df_temp['NPS_Category'] == 'Promoters').sum()
+        passives_count = (df_temp['NPS_Category'] == 'Passives').sum()
+        detractors_count = (df_temp['NPS_Category'] == 'Detractors').sum()
         
-        # Mann-Whitney (non-paramétrique)
-        u_stat, u_pvalue = stats.mannwhitneyu(sat_churned, sat_retained, alternative='two-sided')
+        promoters_pct = (promoters_count / total_clients) * 100
+        passives_pct = (passives_count / total_clients) * 100
+        detractors_pct = (detractors_count / total_clients) * 100
         
-        # === KPIs AVEC TESTS ===
-        st.markdown("#### 🎯 KPIs Satisfaction")
+        nps_score = promoters_pct - detractors_pct
         
-        k1, k2, k3, k4 = st.columns(4)
+        # ========================================
+        # SECTION 1: NPS GÉANT
+        # ========================================
+        st.markdown("### 🎯 Net Promoter Score (NPS)")
         
-        with k1:
-            k1.metric("Churned", f"{sat_churned.mean():.2f}/5", 
-                     delta=f"{sat_churned.mean()-3.24:.2f}")
+        col_nps1, col_nps2, col_nps3, col_nps4 = st.columns([2, 1, 1, 1])
         
-        with k2:
-            k2.metric("Retained", f"{sat_retained.mean():.2f}/5",
-                     delta=f"+{sat_retained.mean()-3.24:.2f}")
-        
-        with k3:
-            ecart = sat_retained.mean() - sat_churned.mean()
-            k3.metric("Écart", f"{ecart:.2f} pts",
-                     delta=f"{(ecart/sat_churned.mean())*100:.0f}%")
-        
-        with k4:
-            low_sat = len(df_temp[df_temp['Satisfaction Score']<=2])
-            k4.metric("Score 1-2 (Risque)", f"{low_sat:,}",
-                     delta=f"{df_temp[df_temp['Satisfaction Score']<=2]['Is_Churned'].mean()*100:.0f}% churn")
-        
-        st.markdown("---")
-        
-        # === DISTRIBUTIONS + TESTS ===
-        st.markdown("#### 📊 Distribution avec Tests Statistiques")
-        
-        col_dist1, col_dist2 = st.columns([2, 1])
-        
-        with col_dist1:
-            fig_dist = go.Figure()
-            
-            fig_dist.add_trace(go.Histogram(
-                x=sat_churned,
-                name='Churned',
-                marker_color='#e74c3c',
-                opacity=0.7,
-                xbins=dict(start=0.5, end=5.5, size=1),
-                histnorm='probability density'
+        with col_nps1:
+            # Gauge NPS
+            fig_nps_gauge = go.Figure(go.Indicator(
+                mode="gauge+number+delta",
+                value=nps_score,
+                title={'text': "NPS Score", 'font': {'size': 24, 'color': 'white'}},
+                delta={'reference': 0, 'increasing': {'color': "#27ae60"}},
+                gauge={
+                    'axis': {'range': [-100, 100], 'tickwidth': 1, 'tickcolor': "white"},
+                    'bar': {'color': "#3498db"},
+                    'bgcolor': "rgba(0,0,0,0)",
+                    'borderwidth': 2,
+                    'bordercolor': "gray",
+                    'steps': [
+                        {'range': [-100, 0], 'color': 'rgba(231,76,60,0.3)'},
+                        {'range': [0, 30], 'color': 'rgba(243,156,18,0.3)'},
+                        {'range': [30, 70], 'color': 'rgba(39,174,96,0.3)'},
+                        {'range': [70, 100], 'color': 'rgba(46,204,113,0.3)'}
+                    ],
+                    'threshold': {
+                        'line': {'color': "white", 'width': 4},
+                        'thickness': 0.75,
+                        'value': nps_score
+                    }
+                },
+                number={'font': {'size': 48, 'color': 'white'}}
             ))
             
-            fig_dist.add_trace(go.Histogram(
-                x=sat_retained,
-                name='Retained',
-                marker_color='#27ae60',
-                opacity=0.7,
-                xbins=dict(start=0.5, end=5.5, size=1),
-                histnorm='probability density'
-            ))
-            
-            fig_dist.update_layout(
-                title=f"Distribution Satisfaction<br><sub>t={t_stat:.1f}, p<0.001</sub>",
-                xaxis_title="Score",
-                yaxis_title="Densité",
-                barmode='overlay',
+            fig_nps_gauge.update_layout(
+                height=300,
                 template="plotly_dark",
-                height=400
+                margin=dict(l=20, r=20, t=60, b=20),
+                paper_bgcolor='rgba(0,0,0,0)',
+                font={'color': 'white'}
             )
             
-            st.plotly_chart(fig_dist, use_container_width=True)
-        
-        with col_dist2:
-            st.markdown("**📊 Tests Stats:**")
+            st.plotly_chart(fig_nps_gauge, use_container_width=True)
+            
+            # Interprétation NPS
+            if nps_score > 50:
+                nps_label = "🌟 Excellent"
+                nps_color = "#27ae60"
+            elif nps_score > 0:
+                nps_label = "👍 Bon"
+                nps_color = "#f39c12"
+            else:
+                nps_label = "⚠️ À améliorer"
+                nps_color = "#e74c3c"
             
             st.markdown(f"""
-            <div style="background: #27ae6022; padding: 15px; border-radius: 8px; border-left: 4px solid #27ae60;">
-                <strong>T-test:</strong><br>
-                t = {t_stat:.2f}<br>
-                p < 0.001<br>
-                ✅ Très significatif
-            </div>
-            """, unsafe_allow_html=True)
-            
-            st.markdown("")
-            
-            st.markdown(f"""
-            <div style="background: #3498db22; padding: 15px; border-radius: 8px; border-left: 4px solid #3498db;">
-                <strong>Mann-Whitney:</strong><br>
-                U = {u_stat:.0f}<br>
-                p < 0.001<br>
-                ✅ Très significatif
+            <div style='text-align:center;padding:10px;background:{nps_color}22;border-radius:8px;border-left:4px solid {nps_color}'>
+                <strong>{nps_label}</strong>
             </div>
             """, unsafe_allow_html=True)
         
-        # === CALCULATEUR PRÉDICTIF ===
-        with st.expander("🎮 Prédicteur de Churn par Satisfaction", expanded=False):
-            st.markdown("### 💡 Estimez le risque de churn selon le score")
-            
-            pred_col1, pred_col2, pred_col3 = st.columns(3)
-            
-            with pred_col1:
-                score_test = st.slider("Score Satisfaction", 1, 5, 3, key="pred")
-                
-                # Calculer taux churn pour ce score
-                churn_for_score = df_temp[df_temp['Satisfaction Score']==score_test]['Is_Churned'].mean() * 100
-                pop_score = len(df_temp[df_temp['Satisfaction Score']==score_test])
-                
-                st.metric("Population", f"{pop_score:,}")
-                st.metric("Taux churn observé", f"{churn_for_score:.1f}%")
-            
-            with pred_col2:
-                # Simulation amélioration
-                target_score = st.slider("Score cible", score_test+1, 5, min(score_test+1, 5), key="target")
-                
-                target_churn = df_temp[df_temp['Satisfaction Score']==target_score]['Is_Churned'].mean() * 100
-                
-                reduction = churn_for_score - target_churn
-                
-                st.metric("Churn cible", f"{target_churn:.1f}%")
-                st.metric("Réduction", f"{reduction:.1f}%", delta="Amélioration")
-            
-            with pred_col3:
-                # Impact
-                affected = st.number_input("Clients concernés", 0, pop_score, min(100, pop_score), key="affected")
-                
-                clients_saved = int(affected * (reduction / 100))
-                gain = clients_saved * 4149
-                
-                st.metric("Clients sauvés", f"{clients_saved:,}")
-                st.metric("Gain estimé", f"${gain:,.0f}")
+        with col_nps2:
+            st.metric(
+                "😊 Promoters",
+                f"{promoters_pct:.1f}%",
+                delta=f"{promoters_count:,} clients"
+            )
+            st.markdown(f"""
+            <div style='background:#27ae6022;padding:15px;border-radius:8px;text-align:center;margin-top:10px;'>
+                <div style='font-size:40px;'>😊</div>
+                <small style='color:#888;'>Scores 4-5</small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col_nps3:
+            st.metric(
+                "😐 Passives",
+                f"{passives_pct:.1f}%",
+                delta=f"{passives_count:,} clients"
+            )
+            st.markdown(f"""
+            <div style='background:#f39c1222;padding:15px;border-radius:8px;text-align:center;margin-top:10px;'>
+                <div style='font-size:40px;'>😐</div>
+                <small style='color:#888;'>Score 3</small>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with col_nps4:
+            st.metric(
+                "😞 Detractors",
+                f"{detractors_pct:.1f}%",
+                delta=f"{detractors_count:,} clients",
+                delta_color="inverse"
+            )
+            st.markdown(f"""
+            <div style='background:#e74c3c22;padding:15px;border-radius:8px;text-align:center;margin-top:10px;'>
+                <div style='font-size:40px;'>😞</div>
+                <small style='color:#888;'>Scores 1-2</small>
+            </div>
+            """, unsafe_allow_html=True)
         
         st.markdown("---")
         
-        # === CHURN PAR SCORE ===
-        st.markdown("#### 📈 Taux Churn par Score")
+        # ========================================
+        # SECTION 2: NPS PAR SEGMENT
+        # ========================================
+        st.markdown("### 📊 NPS par Segment - Où sont vos fans ?")
         
-        churn_by_score = df_temp.groupby('Satisfaction Score', as_index=False).agg({
-            'customerID': 'count',
-            'Is_Churned': 'sum'
-        })
-        churn_by_score.columns = ['Score', 'Total', 'Churned']
-        churn_by_score['Churn_Rate'] = (churn_by_score['Churned'] / churn_by_score['Total'] * 100)
+        col_seg1, col_seg2 = st.columns(2)
         
-        fig_score = go.Figure()
+        with col_seg1:
+            st.markdown("#### Type de Contrat")
+            
+            if 'Contract' in df_temp.columns:
+                nps_by_contract = []
+                for contract in df_temp['Contract'].unique():
+                    df_seg = df_temp[df_temp['Contract'] == contract]
+                    if len(df_seg) > 0:
+                        prom_pct = (df_seg['NPS_Category'] == 'Promoters').sum() / len(df_seg) * 100
+                        detr_pct = (df_seg['NPS_Category'] == 'Detractors').sum() / len(df_seg) * 100
+                        nps = prom_pct - detr_pct
+                        nps_by_contract.append({
+                            'Contract': contract,
+                            'NPS': nps,
+                            'Population': len(df_seg)
+                        })
+                
+                df_nps_contract = pd.DataFrame(nps_by_contract).sort_values('NPS', ascending=True)
+                
+                fig_nps_contract = go.Figure()
+                
+                fig_nps_contract.add_trace(go.Bar(
+                    y=df_nps_contract['Contract'],
+                    x=df_nps_contract['NPS'],
+                    orientation='h',
+                    text=[f"<b>{nps:.0f}</b>" for nps in df_nps_contract['NPS']],
+                    textposition='outside',
+                    marker=dict(
+                        color=df_nps_contract['NPS'],
+                        colorscale='RdYlGn',
+                        cmin=-50,
+                        cmax=50,
+                        showscale=False
+                    ),
+                    hovertemplate='<b>%{y}</b><br>NPS: %{x:.1f}<br>Population: %{customdata:,}<extra></extra>',
+                    customdata=df_nps_contract['Population']
+                ))
+                
+                fig_nps_contract.update_layout(
+                    xaxis_title="NPS Score",
+                    yaxis_title="",
+                    template="plotly_dark",
+                    height=300,
+                    margin=dict(l=150, r=50, t=20, b=50)
+                )
+                
+                st.plotly_chart(fig_nps_contract, use_container_width=True)
         
-        # Bars
-        fig_score.add_trace(go.Bar(
-            x=churn_by_score['Score'],
-            y=churn_by_score['Churn_Rate'],
-            name='Churn',
-            marker_color=['#e74c3c' if r>50 else '#f39c12' if r>25 else '#27ae60' 
-                         for r in churn_by_score['Churn_Rate']],
-            text=[f"{r:.1f}%" for r in churn_by_score['Churn_Rate']],
+        with col_seg2:
+            st.markdown("#### Service Internet")
+            
+            if 'Internet Service' in df_temp.columns:
+                nps_by_service = []
+                for service in df_temp['Internet Service'].unique():
+                    df_seg = df_temp[df_temp['Internet Service'] == service]
+                    if len(df_seg) > 0:
+                        prom_pct = (df_seg['NPS_Category'] == 'Promoters').sum() / len(df_seg) * 100
+                        detr_pct = (df_seg['NPS_Category'] == 'Detractors').sum() / len(df_seg) * 100
+                        nps = prom_pct - detr_pct
+                        nps_by_service.append({
+                            'Service': service,
+                            'NPS': nps,
+                            'Population': len(df_seg)
+                        })
+                
+                df_nps_service = pd.DataFrame(nps_by_service).sort_values('NPS', ascending=True)
+                
+                fig_nps_service = go.Figure()
+                
+                fig_nps_service.add_trace(go.Bar(
+                    y=df_nps_service['Service'],
+                    x=df_nps_service['NPS'],
+                    orientation='h',
+                    text=[f"<b>{nps:.0f}</b>" for nps in df_nps_service['NPS']],
+                    textposition='outside',
+                    marker=dict(
+                        color=df_nps_service['NPS'],
+                        colorscale='RdYlGn',
+                        cmin=-50,
+                        cmax=50,
+                        showscale=False
+                    ),
+                    hovertemplate='<b>%{y}</b><br>NPS: %{x:.1f}<br>Population: %{customdata:,}<extra></extra>',
+                    customdata=df_nps_service['Population']
+                ))
+                
+                fig_nps_service.update_layout(
+                    xaxis_title="NPS Score",
+                    yaxis_title="",
+                    template="plotly_dark",
+                    height=300,
+                    margin=dict(l=150, r=50, t=20, b=50)
+                )
+                
+                st.plotly_chart(fig_nps_service, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # ========================================
+        # SECTION 3: TOP 5 RAISONS + PAINT POINTS
+        # ========================================
+        st.markdown("### 📋 Pourquoi partent-ils ? - Pain Points")
+        
+        col_reasons1, col_reasons2 = st.columns(2)
+        
+        with col_reasons1:
+            st.markdown("#### Top 5 Raisons de Désabonnement")
+            
+            if 'Churn Reason' in df_temp.columns:
+                churned = df_temp[df_temp['Is_Churned'] == 1]
+                if len(churned) > 0 and 'Churn Reason' in churned.columns:
+                    top_reasons = churned['Churn Reason'].value_counts().head(5)
+                    total_churned = len(churned)
+                    
+                    reasons_list = []
+                    for reason, count in top_reasons.items():
+                        pct = (count / total_churned) * 100
+                        reasons_list.append({
+                            'Raison': str(reason)[:35] + '...' if len(str(reason)) > 35 else str(reason),
+                            'Clients': count,
+                            'Pct': pct
+                        })
+                    
+                    df_reasons = pd.DataFrame(reasons_list)
+                    
+                    fig_top5 = go.Figure()
+                    
+                    fig_top5.add_trace(go.Bar(
+                        y=df_reasons['Raison'],
+                        x=df_reasons['Clients'],
+                        orientation='h',
+                        text=[f"<b>{int(c):,}</b> ({p:.0f}%)" 
+                              for c, p in zip(df_reasons['Clients'], df_reasons['Pct'])],
+                        textposition='outside',
+                        marker=dict(
+                            color=['#e74c3c', '#e67e22', '#f39c12', '#f1c40f', '#d35400'],
+                        ),
+                        hovertemplate='<b>%{y}</b><br>Clients: %{x:,}<extra></extra>'
+                    ))
+                    
+                    fig_top5.update_layout(
+                        xaxis_title="Nombre de Clients",
+                        yaxis_title="",
+                        template="plotly_dark",
+                        height=350,
+                        margin=dict(l=200, r=100, t=20, b=50)
+                    )
+                    
+                    st.plotly_chart(fig_top5, use_container_width=True)
+        
+        with col_reasons2:
+            st.markdown("#### Mots-Clés Fréquents (Pain Points)")
+            
+            if 'Churn Reason' in churned.columns:
+                # Extraire mots-clés des raisons
+                all_words = []
+                for reason in churned['Churn Reason'].dropna():
+                    words = re.findall(r'\b[a-zA-Z]{4,}\b', str(reason).lower())
+                    all_words.extend(words)
+                
+                # Stop words à exclure
+                stop_words = {'with', 'from', 'this', 'that', 'have', 'been', 
+                             'were', 'their', 'more', 'than', 'other', 'also',
+                             'want', 'make', 'them', 'into', 'would', 'could'}
+                
+                filtered_words = [w for w in all_words if w not in stop_words]
+                word_freq = Counter(filtered_words).most_common(10)
+                
+                if word_freq:
+                    words_df = pd.DataFrame(word_freq, columns=['Mot', 'Fréquence'])
+                    
+                    fig_words = go.Figure()
+                    
+                    fig_words.add_trace(go.Bar(
+                        y=words_df['Mot'],
+                        x=words_df['Fréquence'],
+                        orientation='h',
+                        text=[f"<b>{freq}</b>" for freq in words_df['Fréquence']],
+                        textposition='outside',
+                        marker=dict(
+                            color=words_df['Fréquence'],
+                            colorscale='Purples',
+                            showscale=False
+                        ),
+                        hovertemplate='<b>%{y}</b><br>Occurrences: %{x}<extra></extra>'
+                    ))
+                    
+                    fig_words.update_layout(
+                        xaxis_title="Occurrences",
+                        yaxis_title="",
+                        template="plotly_dark",
+                        height=350,
+                        margin=dict(l=150, r=50, t=20, b=50)
+                    )
+                    
+                    st.plotly_chart(fig_words, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # ========================================
+        # SECTION 4: CORRÉLATION ÂGE × SATISFACTION
+        # ========================================
+        st.markdown("### 📈 Corrélation Âge vs Satisfaction")
+        
+        if 'Age' in df_temp.columns:
+            # Scatter avec trendline
+            fig_age_sat = px.scatter(
+                df_temp.sample(min(2000, len(df_temp))),  # Sample pour perf
+                x='Age',
+                y='Satisfaction Score',
+                color='NPS_Category',
+                color_discrete_map={
+                    'Promoters': '#27ae60',
+                    'Passives': '#f39c12',
+                    'Detractors': '#e74c3c'
+                },
+                opacity=0.6,
+                trendline='ols',
+                title="",
+                labels={'Age': 'Âge (années)', 'Satisfaction Score': 'Score Satisfaction'},
+                template='plotly_dark',
+                height=450
+            )
+            
+            fig_age_sat.update_traces(marker=dict(size=8))
+            
+            st.plotly_chart(fig_age_sat, use_container_width=True)
+            
+            # Calcul corrélation
+            corr = df_temp[['Age', 'Satisfaction Score']].corr().iloc[0, 1]
+            
+            if abs(corr) > 0.3:
+                st.success(f"✅ **Corrélation modérée détectée:** {corr:.3f} - L'âge influence la satisfaction")
+            elif abs(corr) > 0.1:
+                st.info(f"💡 **Corrélation faible:** {corr:.3f} - Influence limitée de l'âge")
+            else:
+                st.warning(f"⚠️ **Pas de corrélation:** {corr:.3f} - L'âge n'influence pas la satisfaction")
+        
+        st.markdown("---")
+        
+        # ========================================
+        # SECTION 5: NPS vs CHURN - PREUVE CAUSALE
+        # ========================================
+        st.markdown("### 🎯 NPS vs Taux de Churn - La Preuve")
+        
+        churn_by_nps_list = []
+        for cat in ['Detractors', 'Passives', 'Promoters']:
+            df_cat = df_temp[df_temp['NPS_Category'] == cat]
+            if len(df_cat) > 0:
+                churn_rate = (df_cat['Is_Churned'].sum() / len(df_cat)) * 100
+                churn_by_nps_list.append({
+                    'Category': cat,
+                    'Churn_Rate': churn_rate,
+                    'Population': len(df_cat),
+                    'Churned_Clients': df_cat['Is_Churned'].sum()
+                })
+        
+        df_nps_churn = pd.DataFrame(churn_by_nps_list)
+        
+        fig_nps_churn = go.Figure()
+        
+        # Bars churn rate
+        colors_map = {'Detractors': '#e74c3c', 'Passives': '#f39c12', 'Promoters': '#27ae60'}
+        
+        fig_nps_churn.add_trace(go.Bar(
+            x=df_nps_churn['Category'],
+            y=df_nps_churn['Churn_Rate'],
+            name='Taux Churn',
+            text=[f"<b>{rate:.1f}%</b>" for rate in df_nps_churn['Churn_Rate']],
             textposition='outside',
-            yaxis='y1'
+            marker=dict(
+                color=[colors_map[cat] for cat in df_nps_churn['Category']]
+            ),
+            yaxis='y1',
+            hovertemplate='<b>%{x}</b><br>Churn: %{y:.1f}%<br>Clients perdus: %{customdata:,}<extra></extra>',
+            customdata=df_nps_churn['Churned_Clients']
         ))
         
         # Line population
-        fig_score.add_trace(go.Scatter(
-            x=churn_by_score['Score'],
-            y=churn_by_score['Total'],
+        fig_nps_churn.add_trace(go.Scatter(
+            x=df_nps_churn['Category'],
+            y=df_nps_churn['Population'],
             name='Population',
-            mode='lines+markers',
-            marker_color='#3498db',
+            mode='lines+markers+text',
+            text=[f"<b>{int(pop):,}</b>" for pop in df_nps_churn['Population']],
+            textposition='top center',
+            marker=dict(size=15, color='#3498db', line=dict(color='white', width=2)),
+            line=dict(width=4, color='#3498db'),
             yaxis='y2'
         ))
         
-        fig_score.update_layout(
-            title="Churn vs Population par Score",
-            xaxis=dict(title="Score", tickmode='linear', tick0=1, dtick=1),
-            yaxis=dict(title="Churn (%)", side='left'),
-            yaxis2=dict(title="Population", overlaying='y', side='right'),
+        fig_nps_churn.update_layout(
+            xaxis=dict(title="Catégorie NPS", tickfont=dict(size=14)),
+            yaxis=dict(title="<b>Taux de Churn (%)</b>", side='left', titlefont=dict(size=14, color='#e74c3c')),
+            yaxis2=dict(title="<b>Population</b>", overlaying='y', side='right', titlefont=dict(size=14, color='#3498db')),
             template="plotly_dark",
-            height=400
+            height=450,
+            hovermode='x unified',
+            showlegend=True,
+            legend=dict(x=0.7, y=1.15, orientation='h')
         )
         
-        st.plotly_chart(fig_score, use_container_width=True)
+        st.plotly_chart(fig_nps_churn, use_container_width=True)
         
-        # Insights
-        score1_churn = churn_by_score[churn_by_score['Score']==1]['Churn_Rate'].values[0]
-        score5_churn = churn_by_score[churn_by_score['Score']==5]['Churn_Rate'].values[0]
+        # ========================================
+        # INSIGHT AUTOMATIQUE FINAL
+        # ========================================
+        detr_churn = df_nps_churn[df_nps_churn['Category']=='Detractors']['Churn_Rate'].values[0]
+        prom_churn = df_nps_churn[df_nps_churn['Category']=='Promoters']['Churn_Rate'].values[0]
+        ratio = detr_churn / prom_churn if prom_churn > 0 else 0
         
-        st.info(f"""
-        💡 **Insights:** Score 1 = {score1_churn:.0f}% churn vs Score 5 = {score5_churn:.0f}% churn.
-        Ratio: {(score1_churn/score5_churn):.1f}x plus de risque au score 1.
-        """)
+        detr_clients = df_nps_churn[df_nps_churn['Category']=='Detractors']['Churned_Clients'].values[0]
+        potential_save = int(detr_clients * 0.5)  # Si on sauve 50%
+        potential_revenue = potential_save * 4149  # CLTV réel
+        
+        st.markdown("""
+        <div style='background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); 
+                    padding: 25px; border-radius: 10px; margin: 20px 0;'>
+            <h3 style='color: white; margin: 0 0 15px 0;'>🚨 INSIGHT CLÉ - ACTION PRIORITAIRE</h3>
+            <div style='background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px;'>
+                <p style='color: white; margin: 5px 0; font-size: 16px;'>
+                    <strong>• Les Detractors ont {ratio:.1f}x plus de churn que les Promoters</strong>
+                </p>
+                <p style='color: white; margin: 5px 0; font-size: 16px;'>
+                    <strong>• {int(detr_clients):,} Detractors ont churné</strong>
+                </p>
+                <p style='color: white; margin: 5px 0; font-size: 16px;'>
+                    <strong>• Si on sauve 50% des Detractors = {potential_save:,} clients</strong>
+                </p>
+                <p style='color: #2ecc71; margin: 15px 0 5px 0; font-size: 20px;'>
+                    <strong>💰 GAIN POTENTIEL: ${potential_revenue:,.0f}</strong>
+                </p>
+            </div>
+            <p style='color: white; margin: 15px 0 0 0; font-size: 14px;'>
+                <strong>🎯 RECOMMANDATION:</strong> Programme reconquête urgente des clients scores 1-2 
+                (amélioration service, offres compensatoires, support dédié)
+            </p>
+        </div>
+        """.format(ratio=ratio, detr_clients=detr_clients, potential_save=potential_save, 
+                  potential_revenue=potential_revenue), 
+        unsafe_allow_html=True)
     
     except Exception as e:
         st.error(f"❌ Erreur: {str(e)}")
+        import traceback
         with st.expander("🔍 Debug"):
             st.code(traceback.format_exc())
+
 
 
 def render_cost_tab(df: pd.DataFrame):
