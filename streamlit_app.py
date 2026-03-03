@@ -1973,12 +1973,6 @@ def render_behavior_tab(df: pd.DataFrame):
 
 # ------------------------------------------------
 
-
-# ============================================================================
-# FONCTION render_satisfaction_tab - VERSION QUI MARCHE À 100%
-# Tous bugs corrigés + Visuels garantis
-# ============================================================================
-
 def render_satisfaction_tab(df: pd.DataFrame):
     """Onglet Satisfaction - Version fonctionnelle garantie"""
     
@@ -2177,11 +2171,7 @@ def render_satisfaction_tab(df: pd.DataFrame):
         st.plotly_chart(fig_sunburst, use_container_width=True)
         
         st.markdown("---")
-
-
-        st.markdown("---")
-        integrate_simulator_in_satisfaction_tab(df_filtered)
-    
+        
         # ========================================
         # SECTION 3: HEATMAP (BUG FIXÉ)
         # ========================================
@@ -2193,7 +2183,7 @@ def render_satisfaction_tab(df: pd.DataFrame):
             for score in [1, 2, 3, 4, 5]:
                 df_seg = df_temp[(df_temp['NPS_Category'] == nps_cat) & 
                                 (df_temp['Satisfaction Score'] == score)]
-                if len(df_seg) >= 10:  # Minimum 10 clients
+                if len(df_seg) >= 10:
                     churn_rate = (df_seg['Is_Churned'].sum() / len(df_seg)) * 100
                     heatmap_data.append({
                         'NPS': nps_cat,
@@ -2207,7 +2197,6 @@ def render_satisfaction_tab(df: pd.DataFrame):
             pivot_heatmap = df_heatmap.pivot(index='Score', columns='NPS', values='Churn_Rate')
             pivot_pop = df_heatmap.pivot(index='Score', columns='NPS', values='Population')
             
-            # CORRECTION BUG: Gérer NaN
             text_matrix = []
             for row_idx in range(len(pivot_heatmap.index)):
                 row_text = []
@@ -2276,7 +2265,6 @@ def render_satisfaction_tab(df: pd.DataFrame):
                     hovertemplate='<b>%{fullData.name}</b><br>Âge: %{x}<br>Score: %{y}<extra></extra>'
                 ))
             
-            # Trendline
             z = np.polyfit(df_sample['Age'], df_sample['Satisfaction Score'], 1)
             p = np.poly1d(z)
             x_trend = np.array([df_sample['Age'].min(), df_sample['Age'].max()])
@@ -2465,7 +2453,6 @@ def render_satisfaction_tab(df: pd.DataFrame):
             st.metric("Perte", f"${det_lost * 4149:,.0f}")
             st.metric("Potentiel", f"${int(det_lost * 0.5) * 4149:,.0f}")
         
-        # Insight
         potential = int(det_lost * 0.5) * 4149
         
         st.markdown(f"""
@@ -2480,43 +2467,16 @@ def render_satisfaction_tab(df: pd.DataFrame):
             </p>
         </div>
         """, unsafe_allow_html=True)
+        
+        # ⭐⭐⭐ NOUVEAU: SIMULATEUR NPS ⭐⭐⭐
+        st.markdown("---")
+        integrate_simulator_in_satisfaction_tab(df_temp)
+        # ⭐⭐⭐ FIN SIMULATEUR ⭐⭐⭐
     
     except Exception as e:
         st.error(f"❌ Erreur: {str(e)}")
         import traceback
         st.code(traceback.format_exc())
-
-
-# ============================================================================
-# IMPORTS:
-# import plotly.express as px
-# import numpy as np
-# ============================================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
