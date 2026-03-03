@@ -1979,14 +1979,14 @@ def render_behavior_tab(df: pd.DataFrame):
 
 
 # ============================================================================
-# FONCTION render_satisfaction_tab - VERSION EXPERT UX/UI
-# Design impactant + Word Cloud + Sunburst + Insights visuels
+# FONCTION render_satisfaction_tab - VERSION FINALE CORRIGÉE
+# Scatter plot fixé + Distribution améliorée + Sans word cloud
 # ============================================================================
 
 def render_satisfaction_tab(df: pd.DataFrame):
     """
-    Onglet Satisfaction - Version Expert UX/UI
-    Design moderne, visuels impactants, insights immédiats
+    Onglet Satisfaction - Version Finale Expert
+    Visuels impactants + Insights immédiats
     """
     
     st.markdown("""
@@ -2014,7 +2014,7 @@ def render_satisfaction_tab(df: pd.DataFrame):
     </style>
     """, unsafe_allow_html=True)
     
-    st.markdown('<h2 class="sub-title">😊 Satisfaction Client - Vue 360°</h2>', 
+    st.markdown('<h2 class="sub-title">😊 Satisfaction Client - Analyse Approfondie</h2>', 
                 unsafe_allow_html=True)
     
     try:
@@ -2049,7 +2049,7 @@ def render_satisfaction_tab(df: pd.DataFrame):
         nps_score = promoters_pct - detractors_pct
         
         # ========================================
-        # HERO SECTION - NPS CARDS MODERNE
+        # SECTION 1: NPS HERO
         # ========================================
         
         st.markdown('<div class="section-header">🎯 Net Promoter Score</div>', unsafe_allow_html=True)
@@ -2057,7 +2057,7 @@ def render_satisfaction_tab(df: pd.DataFrame):
         col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
         
         with col1:
-            # NPS Gauge moderne
+            # NPS Gauge
             fig_gauge = go.Figure()
             
             fig_gauge.add_trace(go.Indicator(
@@ -2124,7 +2124,7 @@ def render_satisfaction_tab(df: pd.DataFrame):
             </div>
             """, unsafe_allow_html=True)
         
-        # Badge interprétation
+        # Badge
         if nps_score > 30:
             badge = "👍 <b>BON</b>"
             color = "#3498db"
@@ -2144,26 +2144,21 @@ def render_satisfaction_tab(df: pd.DataFrame):
         """, unsafe_allow_html=True)
         
         # ========================================
-        # SECTION 1: SUNBURST - HIÉRARCHIE SATISFACTION
+        # SECTION 2: SUNBURST HIÉRARCHIE
         # ========================================
         
-        st.markdown('<div class="section-header">🎨 Hiérarchie Satisfaction - Vue Sunburst</div>', 
+        st.markdown('<div class="section-header">🎨 Hiérarchie Satisfaction Interactive</div>', 
                     unsafe_allow_html=True)
         
         # Préparer données sunburst
         sunburst_data = []
         
-        # Niveau 1: NPS Categories
         for nps_cat in ['Detractors', 'Passives', 'Promoters']:
             df_nps = df_temp[df_temp['NPS_Category'] == nps_cat]
-            count_nps = len(df_nps)
             
-            # Niveau 2: Scores satisfaction
             for score in df_nps['Satisfaction Score'].unique():
                 df_score = df_nps[df_nps['Satisfaction Score'] == score]
-                count_score = len(df_score)
                 
-                # Niveau 3: Churn status
                 churned_count = df_score['Is_Churned'].sum()
                 retained_count = len(df_score) - churned_count
                 
@@ -2205,146 +2200,66 @@ def render_satisfaction_tab(df: pd.DataFrame):
         )
         
         fig_sunburst.update_layout(
-            title="<b>Hiérarchie: NPS → Score → Statut (Cliquez pour explorer)</b>",
+            title="<b>Cliquez pour explorer: NPS → Score → Statut Client</b>",
             margin=dict(t=50, l=0, r=0, b=0)
         )
         
         st.plotly_chart(fig_sunburst, use_container_width=True)
         
         # ========================================
-        # SECTION 2: DISTRIBUTION SCORES (Stacked Amélioré)
+        # SECTION 3: HEATMAP SATISFACTION × CHURN
         # ========================================
         
-        st.markdown('<div class="section-header">📊 Distribution Détaillée par NPS</div>', 
+        st.markdown('<div class="section-header">🔥 Impact Satisfaction sur Churn</div>',
                     unsafe_allow_html=True)
         
-        col_dist1, col_dist2 = st.columns([2, 1])
-        
-        with col_dist1:
-            # Stacked bar avec annotations
-            nps_sat_dist = df_temp.groupby(['NPS_Category', 'Satisfaction Score']).size().reset_index(name='Count')
-            nps_totals = df_temp.groupby('NPS_Category').size().reset_index(name='Total')
-            nps_sat_dist = nps_sat_dist.merge(nps_totals, on='NPS_Category')
-            nps_sat_dist['Percentage'] = (nps_sat_dist['Count'] / nps_sat_dist['Total']) * 100
-            
-            fig_dist = go.Figure()
-            
-            score_colors = {1: '#8B0000', 2: '#e74c3c', 3: '#f39c12', 4: '#27ae60', 5: '#2ecc71'}
-            
+        # Calculer taux churn par score ET catégorie NPS
+        heatmap_data = []
+        for nps_cat in ['Detractors', 'Passives', 'Promoters']:
             for score in [1, 2, 3, 4, 5]:
-                data = nps_sat_dist[nps_sat_dist['Satisfaction Score'] == score]
-                fig_dist.add_trace(go.Bar(
-                    x=data['NPS_Category'],
-                    y=data['Percentage'],
-                    name=f'Score {score}',
-                    marker_color=score_colors[score],
-                    text=[f'{p:.0f}%' for p in data['Percentage']],
-                    textposition='inside',
-                    textfont=dict(size=12, color='white', family='Arial Black')
-                ))
+                df_seg = df_temp[(df_temp['NPS_Category'] == nps_cat) & 
+                                (df_temp['Satisfaction Score'] == score)]
+                if len(df_seg) > 10:
+                    churn_rate = (df_seg['Is_Churned'].sum() / len(df_seg)) * 100
+                    heatmap_data.append({
+                        'NPS': nps_cat,
+                        'Score': score,
+                        'Churn_Rate': churn_rate,
+                        'Population': len(df_seg)
+                    })
+        
+        df_heatmap = pd.DataFrame(heatmap_data)
+        
+        if len(df_heatmap) > 0:
+            pivot_heatmap = df_heatmap.pivot(index='Score', columns='NPS', values='Churn_Rate')
+            pivot_pop = df_heatmap.pivot(index='Score', columns='NPS', values='Population')
             
-            fig_dist.update_layout(
-                barmode='stack',
+            fig_heatmap = go.Figure(data=go.Heatmap(
+                z=pivot_heatmap.values,
+                x=pivot_heatmap.columns,
+                y=pivot_heatmap.index,
+                text=[[f"{v:.0f}%<br>({int(pivot_pop.loc[row, col]):,})" 
+                      for col, v in zip(pivot_heatmap.columns, row_vals)]
+                     for row, row_vals in zip(pivot_heatmap.index, pivot_heatmap.values)],
+                texttemplate='%{text}',
+                textfont={"size": 14, "color": "white", "family": "Arial Black"},
+                colorscale='RdYlGn_r',
+                colorbar=dict(title="Churn %"),
+                hovertemplate='<b>Score %{y} - %{x}</b><br>Churn: %{z:.1f}%<extra></extra>'
+            ))
+            
+            fig_heatmap.update_layout(
+                title="<b>Taux de Churn par Score × Catégorie NPS</b>",
+                xaxis_title="<b>Catégorie NPS</b>",
+                yaxis_title="<b>Score Satisfaction</b>",
                 template="plotly_dark",
-                height=450,
-                xaxis_title="",
-                yaxis_title="Distribution (%)",
-                legend=dict(
-                    title="<b>Satisfaction</b>",
-                    orientation='h',
-                    y=-0.12,
-                    x=0.5,
-                    xanchor='center'
-                ),
-                title="<b>Distribution complète des scores 1-5</b>"
+                height=450
             )
             
-            st.plotly_chart(fig_dist, use_container_width=True)
-        
-        with col_dist2:
-            # Moyennes avec deltas
-            det_avg = df_temp[df_temp['NPS_Category']=='Detractors']['Satisfaction Score'].mean()
-            pas_avg = df_temp[df_temp['NPS_Category']=='Passives']['Satisfaction Score'].mean()
-            pro_avg = df_temp[df_temp['NPS_Category']=='Promoters']['Satisfaction Score'].mean()
-            
-            st.markdown("### 📈 Moyennes")
-            
-            st.metric("😞 Detractors", 
-                     f"{det_avg:.2f}/5",
-                     delta=f"{det_avg-3.24:.2f}",
-                     delta_color="inverse")
-            
-            st.metric("😐 Passives",
-                     f"{pas_avg:.2f}/5",
-                     delta=f"{pas_avg-3.24:.2f}",
-                     delta_color="off")
-            
-            st.metric("😊 Promoters",
-                     f"{pro_avg:.2f}/5",
-                     delta=f"+{pro_avg-3.24:.2f}")
-            
-            # Insight
-            gap = pro_avg - det_avg
-            st.markdown(f"""
-            <div style='background:#3498db22;padding:15px;border-radius:8px;margin-top:20px;border-left:4px solid #3498db;'>
-                <strong>💡 Insight:</strong><br>
-                Écart Promoters-Detractors:<br>
-                <span style='font-size:28px;color:#3498db;'>{gap:.2f}</span> points
-            </div>
-            """, unsafe_allow_html=True)
+            st.plotly_chart(fig_heatmap, use_container_width=True)
         
         # ========================================
-        # SECTION 3: WORD CLOUD - PAIN POINTS
-        # ========================================
-        
-        st.markdown('<div class="section-header">☁️ Pain Points - Motifs de Mécontentement</div>',
-                    unsafe_allow_html=True)
-        
-        st.info("""
-        💡 **Analyse qualitative:** Basée sur les attributs comportementaux et services des clients Detractors.
-        Les mots-clés représentent les services/options associés aux clients les plus insatisfaits.
-        """)
-        
-        # Générer word cloud basé sur attributs Detractors
-        detractors_df = df_temp[df_temp['NPS_Category'] == 'Detractors']
-        
-        if len(detractors_df) > 0:
-            word_freq = {}
-            
-            # Services analysis
-            for col in ['Internet Service', 'Contract', 'Payment Method']:
-                if col in detractors_df.columns:
-                    top_values = detractors_df[col].value_counts().head(3)
-                    for val, count in top_values.items():
-                        if pd.notna(val):
-                            word_freq[str(val)] = count
-            
-            # Ajouter contexte
-            word_freq['Insatisfaction'] = len(detractors_df)
-            word_freq['Risque_Churn'] = detractors_df['Is_Churned'].sum()
-            
-            if word_freq:
-                from wordcloud import WordCloud
-                import matplotlib.pyplot as plt
-                
-                wordcloud = WordCloud(
-                    width=1200,
-                    height=400,
-                    background_color='#0e1117',
-                    colormap='RdYlGn_r',
-                    relative_scaling=0.5,
-                    min_font_size=14
-                ).generate_from_frequencies(word_freq)
-                
-                fig_wc, ax = plt.subplots(figsize=(14, 5))
-                ax.imshow(wordcloud, interpolation='bilinear')
-                ax.axis('off')
-                fig_wc.patch.set_facecolor('#0e1117')
-                
-                st.pyplot(fig_wc)
-        
-        # ========================================
-        # SECTION 4: CORRÉLATION ÂGE (Sans trendline OLS)
+        # SECTION 4: CORRÉLATION ÂGE (FIXÉE)
         # ========================================
         
         st.markdown('<div class="section-header">📈 Corrélation Âge × Satisfaction</div>',
@@ -2354,67 +2269,83 @@ def render_satisfaction_tab(df: pd.DataFrame):
             sample_size = min(2000, len(df_temp))
             df_sample = df_temp.sample(sample_size, random_state=42)
             
-            # Scatter SANS trendline (évite statsmodels)
-            fig_corr = px.scatter(
-                df_sample,
-                x='Age',
-                y='Satisfaction Score',
-                color='NPS_Category',
-                color_discrete_map={
-                    'Promoters': '#27ae60',
-                    'Passives': '#f39c12',
-                    'Detractors': '#e74c3c'
-                },
-                opacity=0.6,
-                template='plotly_dark',
-                height=450,
-                labels={'Age': 'Âge (années)', 'Satisfaction Score': 'Score'},
-                marginal_x="histogram",
-                marginal_y="histogram"
-            )
+            # Scatter SANS marginal (évite le bug marker.size)
+            fig_corr = go.Figure()
             
-            fig_corr.update_traces(marker=dict(size=7, line=dict(width=0.5, color='white')))
+            colors_nps = {'Promoters': '#27ae60', 'Passives': '#f39c12', 'Detractors': '#e74c3c'}
+            
+            for nps_cat in ['Detractors', 'Passives', 'Promoters']:
+                df_cat = df_sample[df_sample['NPS_Category'] == nps_cat]
+                
+                fig_corr.add_trace(go.Scatter(
+                    x=df_cat['Age'],
+                    y=df_cat['Satisfaction Score'],
+                    mode='markers',
+                    name=nps_cat,
+                    marker=dict(
+                        color=colors_nps[nps_cat],
+                        size=6,
+                        opacity=0.6,
+                        line=dict(width=0.5, color='white')
+                    ),
+                    hovertemplate='<b>%{fullData.name}</b><br>Âge: %{x}<br>Score: %{y}<extra></extra>'
+                ))
+            
+            # Ajouter trendline manuelle (régression linéaire simple)
+            from scipy import stats
+            slope, intercept, r_value, p_value, std_err = stats.linregress(df_sample['Age'], 
+                                                                           df_sample['Satisfaction Score'])
+            
+            x_trend = np.array([df_sample['Age'].min(), df_sample['Age'].max()])
+            y_trend = slope * x_trend + intercept
+            
+            fig_corr.add_trace(go.Scatter(
+                x=x_trend,
+                y=y_trend,
+                mode='lines',
+                name='Trendline',
+                line=dict(color='cyan', width=3, dash='dash'),
+                hovertemplate='Trend<extra></extra>'
+            ))
+            
+            fig_corr.update_layout(
+                title=f"<b>Corrélation Âge × Satisfaction (R² = {r_value**2:.3f})</b>",
+                xaxis_title="<b>Âge (années)</b>",
+                yaxis_title="<b>Score Satisfaction</b>",
+                template="plotly_dark",
+                height=500,
+                hovermode='closest'
+            )
             
             st.plotly_chart(fig_corr, use_container_width=True)
             
-            # Corrélation
+            # Stats
             corr = df_temp[['Age', 'Satisfaction Score']].corr().iloc[0, 1]
             
-            col_c1, col_c2 = st.columns([1, 2])
+            col_c1, col_c2, col_c3 = st.columns(3)
             
-            with col_c1:
-                st.metric("Corrélation Pearson", f"{corr:.3f}")
-                
-                if abs(corr) > 0.3:
-                    st.success("✅ Corrélation modérée")
-                elif abs(corr) > 0.1:
-                    st.info("💡 Corrélation faible")
-                else:
-                    st.warning("⚠️ Pas de corrélation")
+            col_c1.metric("Corrélation Pearson", f"{corr:.3f}")
+            col_c2.metric("R² (Trendline)", f"{r_value**2:.3f}")
             
-            with col_c2:
-                df_temp['Age_Group'] = pd.cut(df_temp['Age'],
-                                              bins=[0, 30, 45, 60, 100],
-                                              labels=['18-30', '31-45', '46-60', '60+'])
-                
-                age_sat = df_temp.groupby('Age_Group')['Satisfaction Score'].mean()
-                
-                st.markdown("**Par tranche d'âge:**")
-                for age_group, sat in age_sat.items():
-                    st.write(f"• {age_group}: {sat:.2f}/5")
+            if abs(corr) > 0.3:
+                col_c3.success("✅ Corrélation modérée")
+            elif abs(corr) > 0.1:
+                col_c3.info("💡 Corrélation faible")
+            else:
+                col_c3.warning("⚠️ Pas de corrélation")
         
         # ========================================
-        # SECTION 5: SATISFACTION PAR OFFRE & SERVICE
+        # SECTION 5: SATISFACTION PAR OFFRE
         # ========================================
         
-        st.markdown('<div class="section-header">🎁 Satisfaction par Offre & Service</div>',
+        st.markdown('<div class="section-header">🎁 Performance par Offre</div>',
                     unsafe_allow_html=True)
         
-        col_off1, col_off2 = st.columns(2)
-        
-        with col_off1:
-            if 'Offer' in df_temp.columns:
-                st.markdown("#### Par Offre")
+        if 'Offer' in df_temp.columns:
+            col_off1, col_off2 = st.columns(2)
+            
+            with col_off1:
+                st.markdown("#### Distribution Satisfaction")
                 df_offers = df_temp[df_temp['Offer'].notna()]
                 
                 if len(df_offers) > 0:
@@ -2435,65 +2366,78 @@ def render_satisfaction_tab(df: pd.DataFrame):
                             name=f'Score {score}',
                             marker_color=score_colors[score],
                             text=[f'{p:.0f}%' if p > 5 else '' for p in data['Percentage']],
-                            textposition='inside'
+                            textposition='inside',
+                            textfont=dict(size=11, color='white')
                         ))
                     
                     fig_offer.update_layout(
                         barmode='stack',
                         template="plotly_dark",
                         height=400,
-                        showlegend=False
+                        showlegend=True,
+                        legend=dict(orientation='h', y=-0.15)
                     )
                     
                     st.plotly_chart(fig_offer, use_container_width=True)
-        
-        with col_off2:
-            st.markdown("#### Par Service")
             
-            services = ['Internet Service', 'Tech Support']
-            svc_stats = []
-            
-            for svc in [s for s in services if s in df_temp.columns]:
-                for val in df_temp[svc].unique():
-                    if pd.notna(val) and val not in ['No internet service']:
-                        seg = df_temp[df_temp[svc] == val]
-                        if len(seg) > 50:
-                            svc_stats.append({
-                                'Service': f"{svc}<br>{val}",
-                                'Satisfaction': seg['Satisfaction Score'].mean(),
-                                'Clients': len(seg)
-                            })
-            
-            if svc_stats:
-                df_svc = pd.DataFrame(svc_stats).sort_values('Satisfaction', ascending=False)
+            with col_off2:
+                st.markdown("#### Satisfaction Moyenne & Churn")
                 
-                fig_svc = go.Figure(go.Bar(
-                    x=df_svc['Service'],
-                    y=df_svc['Satisfaction'],
+                offer_stats = df_offers.groupby('Offer').agg({
+                    'Satisfaction Score': 'mean',
+                    'Is_Churned': 'mean',
+                    'customerID': 'count'
+                }).round(2)
+                
+                offer_stats.columns = ['Sat_Moy', 'Churn_Rate', 'Clients']
+                offer_stats['Churn_Rate'] = (offer_stats['Churn_Rate'] * 100).round(1)
+                offer_stats = offer_stats.sort_values('Sat_Moy', ascending=False)
+                
+                fig_offer_perf = go.Figure()
+                
+                fig_offer_perf.add_trace(go.Bar(
+                    x=offer_stats.index,
+                    y=offer_stats['Sat_Moy'],
+                    name='Satisfaction',
                     marker=dict(
-                        color=df_svc['Satisfaction'],
+                        color=offer_stats['Sat_Moy'],
                         colorscale='RdYlGn',
                         cmin=1,
                         cmax=5,
-                        colorbar=dict(title="Score")
+                        showscale=False
                     ),
-                    text=[f"{s:.2f}" for s in df_svc['Satisfaction']],
-                    textposition='outside'
+                    text=[f"{s:.2f}" for s in offer_stats['Sat_Moy']],
+                    textposition='outside',
+                    yaxis='y1'
                 ))
                 
-                fig_svc.update_layout(
+                fig_offer_perf.add_trace(go.Scatter(
+                    x=offer_stats.index,
+                    y=offer_stats['Churn_Rate'],
+                    name='Churn %',
+                    mode='lines+markers+text',
+                    text=[f"{c:.0f}%" for c in offer_stats['Churn_Rate']],
+                    textposition='top center',
+                    marker=dict(size=12, color='#e74c3c'),
+                    line=dict(width=3, color='#e74c3c'),
+                    yaxis='y2'
+                ))
+                
+                fig_offer_perf.update_layout(
                     template="plotly_dark",
                     height=400,
-                    yaxis=dict(range=[1, 5])
+                    yaxis=dict(title="Satisfaction", range=[1, 5]),
+                    yaxis2=dict(title="Churn %", overlaying='y', side='right'),
+                    hovermode='x unified'
                 )
                 
-                st.plotly_chart(fig_svc, use_container_width=True)
+                st.plotly_chart(fig_offer_perf, use_container_width=True)
         
         # ========================================
-        # SECTION 6: IMPACT NPS SUR CHURN
+        # SECTION 6: IMPACT NPS × CHURN
         # ========================================
         
-        st.markdown('<div class="section-header">🎯 Impact Business - NPS vs Churn</div>',
+        st.markdown('<div class="section-header">🎯 Impact Business NPS</div>',
                     unsafe_allow_html=True)
         
         churn_by_nps = []
@@ -2510,69 +2454,68 @@ def render_satisfaction_tab(df: pd.DataFrame):
         
         df_cnps = pd.DataFrame(churn_by_nps)
         
-        fig_impact = go.Figure()
+        col_imp1, col_imp2 = st.columns([2, 1])
         
-        colors = {'Detractors': '#e74c3c', 'Passives': '#f39c12', 'Promoters': '#27ae60'}
+        with col_imp1:
+            fig_impact = go.Figure()
+            
+            colors = {'Detractors': '#e74c3c', 'Passives': '#f39c12', 'Promoters': '#27ae60'}
+            
+            fig_impact.add_trace(go.Bar(
+                x=df_cnps['Cat'],
+                y=df_cnps['Churn'],
+                marker_color=[colors[c] for c in df_cnps['Cat']],
+                text=[f"<b>{r:.1f}%</b>" for r in df_cnps['Churn']],
+                textposition='outside',
+                textfont=dict(size=18, family='Arial Black'),
+                hovertemplate='<b>%{x}</b><br>Churn: %{y:.1f}%<br>Pop: %{customdata[0]:,}<br>Perdus: %{customdata[1]:,}<extra></extra>',
+                customdata=df_cnps[['Pop', 'Lost']]
+            ))
+            
+            fig_impact.update_layout(
+                title="<b>Taux de Churn par Catégorie NPS</b>",
+                template="plotly_dark",
+                height=400,
+                yaxis_title="<b>Churn (%)</b>"
+            )
+            
+            st.plotly_chart(fig_impact, use_container_width=True)
         
-        fig_impact.add_trace(go.Bar(
-            x=df_cnps['Cat'],
-            y=df_cnps['Churn'],
-            marker_color=[colors[c] for c in df_cnps['Cat']],
-            text=[f"<b>{r:.1f}%</b>" for r in df_cnps['Churn']],
-            textposition='outside',
-            textfont=dict(size=18, family='Arial Black')
-        ))
-        
-        fig_impact.update_layout(
-            template="plotly_dark",
-            height=400,
-            yaxis_title="<b>Taux de Churn (%)</b>",
-            showlegend=False
-        )
-        
-        st.plotly_chart(fig_impact, use_container_width=True)
+        with col_imp2:
+            det_churn = df_cnps[df_cnps['Cat']=='Detractors']['Churn'].values[0]
+            pro_churn = df_cnps[df_cnps['Cat']=='Promoters']['Churn'].values[0]
+            ratio = det_churn / pro_churn if pro_churn > 0 else 0
+            
+            det_lost = df_cnps[df_cnps['Cat']=='Detractors']['Lost'].values[0]
+            revenue_loss = det_lost * 4149
+            potential_save = int(det_lost * 0.5) * 4149
+            
+            st.markdown("### 📊 KPIs Impact")
+            st.metric("Ratio Risque", f"{ratio:.1f}x", 
+                     help="Detractors vs Promoters")
+            st.metric("Clients Perdus", f"{det_lost:,}")
+            st.metric("Perte Actuelle", f"${revenue_loss:,.0f}")
+            st.metric("Potentiel (50%)", f"${potential_save:,.0f}",
+                     delta=f"+${potential_save:,.0f}")
         
         # Insight final
-        det_churn = df_cnps[df_cnps['Cat']=='Detractors']['Churn'].values[0]
-        pro_churn = df_cnps[df_cnps['Cat']=='Promoters']['Churn'].values[0]
-        ratio = det_churn / pro_churn if pro_churn > 0 else 0
-        
-        det_lost = df_cnps[df_cnps['Cat']=='Detractors']['Lost'].values[0]
-        revenue_loss = det_lost * 4149
-        potential_save = int(det_lost * 0.5) * 4149
-        
         st.markdown(f"""
         <div style='background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); 
-                    padding: 30px; border-radius: 15px; margin: 30px 0;
+                    padding: 25px; border-radius: 15px; margin: 20px 0;
                     box-shadow: 0 8px 32px rgba(231,76,60,0.4);'>
-            <h3 style='color: white; margin: 0 0 20px 0;'>🚨 INSIGHT STRATÉGIQUE</h3>
-            <div style='display: grid; grid-template-columns: 1fr 1fr; gap: 15px;'>
-                <div style='background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'>
-                    <div style='color: white; font-size: 14px; margin-bottom: 5px;'>Ratio de Risque</div>
-                    <div style='color: white; font-size: 36px; font-weight: bold;'>{ratio:.1f}x</div>
-                    <div style='color: rgba(255,255,255,0.7); font-size: 12px;'>Detractors vs Promoters</div>
-                </div>
-                <div style='background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'>
-                    <div style='color: white; font-size: 14px; margin-bottom: 5px;'>Clients Perdus</div>
-                    <div style='color: white; font-size: 36px; font-weight: bold;'>{det_lost:,}</div>
-                    <div style='color: rgba(255,255,255,0.7); font-size: 12px;'>Detractors churned</div>
-                </div>
-                <div style='background: rgba(231,76,60,0.3); padding: 20px; border-radius: 10px;'>
-                    <div style='color: white; font-size: 14px; margin-bottom: 5px;'>💸 Perte Actuelle</div>
-                    <div style='color: #fff; font-size: 32px; font-weight: bold;'>${revenue_loss:,.0f}</div>
-                </div>
-                <div style='background: rgba(39,174,96,0.3); padding: 20px; border-radius: 10px;'>
-                    <div style='color: white; font-size: 14px; margin-bottom: 5px;'>💰 Potentiel (50%)</div>
-                    <div style='color: #2ecc71; font-size: 32px; font-weight: bold;'>${potential_save:,.0f}</div>
-                </div>
-            </div>
-            <div style='margin-top: 20px; padding: 15px; background: rgba(0,0,0,0.3); border-radius: 8px;'>
-                <strong style='color: white;'>🎯 ACTIONS PRIORITAIRES:</strong><br>
-                <span style='color: rgba(255,255,255,0.9); font-size: 14px;'>
-                • Programme reconquête Detractors ciblé<br>
-                • Amélioration expérience client scores 1-2<br>
-                • Incentives rétention haute valeur
-                </span>
+            <h3 style='color: white; margin: 0 0 15px 0;'>🚨 RECOMMANDATION STRATÉGIQUE</h3>
+            <div style='background: rgba(255,255,255,0.1); padding: 20px; border-radius: 10px;'>
+                <p style='color: white; margin: 0; font-size: 16px; line-height: 1.8;'>
+                    <strong>Les Detractors représentent un risque {ratio:.1f}x supérieur.</strong><br><br>
+                    
+                    <strong>Actions prioritaires:</strong><br>
+                    • Programme reconquête ciblé sur {det_lost:,} Detractors<br>
+                    • Amélioration immédiate scores 1-2<br>
+                    • Monitoring satisfaction temps réel<br>
+                    • Incentives rétention haute valeur<br><br>
+                    
+                    <strong style='color:#2ecc71;font-size:18px;'>💰 Gain potentiel: ${potential_save:,.0f}</strong>
+                </p>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -2585,10 +2528,13 @@ def render_satisfaction_tab(df: pd.DataFrame):
 
 
 # ============================================================================
-# FIN FONCTION
+# FIN
 # ============================================================================
 
-# IMPORTS REQUIS EN HAUT DU FICHIER:
+# IMPORTS REQUIS:
+# import plotly.express as px
+# from scipy import stats
+# import numpy as np# IMPORTS REQUIS EN HAUT DU FICHIER:
 # import plotly.express as px
 # from wordcloud import WordCloud
 # import matplotlib.pyplot as plt
