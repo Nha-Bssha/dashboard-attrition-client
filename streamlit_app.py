@@ -2177,7 +2177,11 @@ def render_satisfaction_tab(df: pd.DataFrame):
         st.plotly_chart(fig_sunburst, use_container_width=True)
         
         st.markdown("---")
-        
+
+
+        st.markdown("---")
+        integrate_simulator_in_satisfaction_tab(df_filtered)
+    
         # ========================================
         # SECTION 3: HEATMAP (BUG FIXÉ)
         # ========================================
