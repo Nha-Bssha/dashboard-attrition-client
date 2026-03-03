@@ -1346,10 +1346,525 @@ def render_satisfaction_tab(df: pd.DataFrame):
     st.info("🚧 En cours de développement...")
 
 def render_cost_tab(df: pd.DataFrame):
-    """Onglet Coût du Churn"""
-    st.markdown('<h2 class="sub-title">Coût du Churn</h2>', 
+    """
+    Onglet 4: Impact Financier - COMBIEN coûte le churn?
+    Analyses financières niveau CFO avec simulateurs interactifs
+    """
+    st.markdown('<h2 class="sub-title">💰 Impact Financier du Churn</h2>', 
                 unsafe_allow_html=True)
-    st.info("🚧 En cours de développement...")
+    
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, #f39c12 0%, #d35400 100%); 
+                padding: 20px; border-radius: 10px; margin-bottom: 30px;">
+        <h3 style="color: white; margin: 0;">💡 Vue CFO</h3>
+        <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 16px;">
+            Analyse financière complète : Pertes actuelles, CLTV, ROI campagnes, scénarios what-if
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    try:
+        # Préparer données
+        df_temp = df.copy()
+        if 'Churn' not in df_temp.columns:
+            st.error("❌ Colonne 'Churn' manquante")
+            return
+            
+        df_temp['Is_Churned'] = (df_temp['Churn'] == 'Yes').astype(int)
+        
+        # Calculs financiers de base
+        total_customers = len(df_temp)
+        total_churned = df_temp['Is_Churned'].sum()
+        total_retained = total_customers - total_churned
+        churn_rate = (total_churned / total_customers * 100) if total_customers > 0 else 0
+        
+        # CLTV moyen (depuis colonne ou calculé)
+        if 'CLTV' in df_temp.columns:
+            cltv_moyen = df_temp['CLTV'].mean()
+            cltv_churned = df_temp[df_temp['Is_Churned']==1]['CLTV'].mean()
+            cltv_retained = df_temp[df_temp['Is_Churned']==0]['CLTV'].mean()
+        else:
+            cltv_moyen = 3500
+            cltv_churned = 3500
+            cltv_retained = 3500
+        
+        # Pertes totales
+        pertes_totales = total_churned * cltv_moyen
+        impact_annuel = pertes_totales  # Pertes sur la période
+        
+        # Revenus mensuels moyens
+        if 'Monthly Charge' in df_temp.columns:
+            revenue_moyen = df_temp['Monthly Charge'].mean()
+            revenue_perdu_mensuel = total_churned * revenue_moyen
+        else:
+            revenue_moyen = 70
+            revenue_perdu_mensuel = total_churned * revenue_moyen
+        
+        # ========== 1. VUE D'ENSEMBLE FINANCIÈRE ==========
+        st.markdown("### 💰 Vue d'ensemble financière")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        col1.metric(
+            "💸 Pertes Totales",
+            f"${pertes_totales:,.0f}",
+            delta=f"-{churn_rate:.1f}% clients",
+            delta_color="inverse"
+        )
+        
+        col2.metric(
+            "📊 CLTV Moyen",
+            f"${cltv_moyen:,.0f}",
+            delta=f"Churned: ${cltv_churned:,.0f}",
+            help="Customer Lifetime Value moyen"
+        )
+        
+        col3.metric(
+            "📉 Revenus Perdus/Mois",
+            f"${revenue_perdu_mensuel:,.0f}",
+            delta=f"{total_churned} clients"
+        )
+        
+        col4.metric(
+            "🎯 Impact Annuel",
+            f"${impact_annuel:,.0f}",
+            delta=f"Sur {total_customers:,} clients"
+        )
+        
+        st.markdown("---")
+        
+        # ========== 2. DÉCOMPOSITION PERTES PAR DIMENSION ==========
+        st.markdown("### 📊 Décomposition pertes par dimension")
+        
+        # Analyser pertes par dimensions
+        dimensions_data = []
+        
+        # GEO
+        if 'City' in df_temp.columns:
+            city_pertes = df_temp[df_temp['Is_Churned']==1].groupby('City', as_index=False).agg({
+                'customerID': 'count'
+            })
+            city_pertes.columns = ['City', 'Churned']
+            city_pertes['Pertes'] = city_pertes['Churned'] * cltv_moyen
+            top_city = city_pertes.nlargest(1, 'Pertes').iloc[0]
+            dimensions_data.append({
+                'Dimension': 'Géographique',
+                'Top_Segment': top_city['City'],
+                'Pertes': top_city['Pertes'],
+                'Clients': top_city['Churned']
+            })
+        
+        # CONTRAT
+        if 'Contract' in df_temp.columns:
+            contract_pertes = df_temp[df_temp['Is_Churned']==1].groupby('Contract', as_index=False).agg({
+                'customerID': 'count'
+            })
+            contract_pertes.columns = ['Contract', 'Churned']
+            contract_pertes['Pertes'] = contract_pertes['Churned'] * cltv_moyen
+            top_contract = contract_pertes.nlargest(1, 'Pertes').iloc[0]
+            dimensions_data.append({
+                'Dimension': 'Type Contrat',
+                'Top_Segment': top_contract['Contract'],
+                'Pertes': top_contract['Pertes'],
+                'Clients': top_contract['Churned']
+            })
+        
+        # SERVICE INTERNET
+        if 'Internet Service' in df_temp.columns:
+            internet_pertes = df_temp[df_temp['Is_Churned']==1].groupby('Internet Service', as_index=False).agg({
+                'customerID': 'count'
+            })
+            internet_pertes.columns = ['Internet', 'Churned']
+            internet_pertes['Pertes'] = internet_pertes['Churned'] * cltv_moyen
+            top_internet = internet_pertes.nlargest(1, 'Pertes').iloc[0]
+            dimensions_data.append({
+                'Dimension': 'Service Internet',
+                'Top_Segment': top_internet['Internet'],
+                'Pertes': top_internet['Pertes'],
+                'Clients': top_internet['Churned']
+            })
+        
+        # Afficher tableau décomposition
+        if dimensions_data:
+            df_dimensions = pd.DataFrame(dimensions_data)
+            df_dimensions['% du Total'] = (df_dimensions['Pertes'] / pertes_totales * 100)
+            
+            st.dataframe(
+                df_dimensions.style.format({
+                    'Pertes': '${:,.0f}',
+                    'Clients': '{:,.0f}',
+                    '% du Total': '{:.1f}%'
+                }),
+                use_container_width=True,
+                hide_index=True
+            )
+        
+        # Graphique Sunburst (si plotly disponible)
+        st.markdown("#### 🎯 Répartition hiérarchique des pertes")
+        
+        # Créer données pour sunburst
+        sunburst_data = []
+        for dim in dimensions_data:
+            sunburst_data.append({
+                'labels': dim['Top_Segment'],
+                'parents': dim['Dimension'],
+                'values': dim['Pertes']
+            })
+            sunburst_data.append({
+                'labels': dim['Dimension'],
+                'parents': 'Total Pertes',
+                'values': dim['Pertes']
+            })
+        sunburst_data.append({
+            'labels': 'Total Pertes',
+            'parents': '',
+            'values': pertes_totales
+        })
+        
+        df_sunburst = pd.DataFrame(sunburst_data)
+        
+        fig_sunburst = go.Figure(go.Sunburst(
+            labels=df_sunburst['labels'],
+            parents=df_sunburst['parents'],
+            values=df_sunburst['values'],
+            branchvalues="total",
+            marker=dict(
+                colorscale='RdYlGn_r',
+                cmid=pertes_totales/2
+            ),
+            textinfo="label+percent parent+value",
+        ))
+        
+        fig_sunburst.update_layout(
+            title="Décomposition hiérarchique des pertes ($)",
+            height=500,
+            template="plotly_dark"
+        )
+        
+        st.plotly_chart(fig_sunburst, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # ========== 3. ANALYSE CLTV ==========
+        st.markdown("### 💎 Analyse Customer Lifetime Value (CLTV)")
+        
+        col_cltv1, col_cltv2 = st.columns(2)
+        
+        with col_cltv1:
+            # Distribution CLTV
+            if 'CLTV' in df_temp.columns:
+                fig_cltv_dist = go.Figure()
+                
+                fig_cltv_dist.add_trace(go.Histogram(
+                    x=df_temp[df_temp['Is_Churned']==1]['CLTV'],
+                    name='Churned',
+                    marker_color='#e74c3c',
+                    opacity=0.7
+                ))
+                
+                fig_cltv_dist.add_trace(go.Histogram(
+                    x=df_temp[df_temp['Is_Churned']==0]['CLTV'],
+                    name='Retained',
+                    marker_color='#27ae60',
+                    opacity=0.7
+                ))
+                
+                fig_cltv_dist.update_layout(
+                    title="Distribution CLTV: Churned vs Retained",
+                    xaxis_title="CLTV ($)",
+                    yaxis_title="Nombre de clients",
+                    barmode='overlay',
+                    height=350,
+                    template="plotly_dark"
+                )
+                
+                st.plotly_chart(fig_cltv_dist, use_container_width=True)
+            else:
+                st.info("💡 Colonne CLTV non disponible - Utilisation valeur fixe $3,500")
+        
+        with col_cltv2:
+            # Valeur à risque
+            st.markdown("""
+            <div style="background: rgba(231, 76, 60, 0.1); padding: 20px; border-radius: 10px; border-left: 4px solid #e74c3c;">
+                <h4 style="color: #e74c3c; margin-top: 0;">⚠️ Valeur Totale à Risque</h4>
+            """, unsafe_allow_html=True)
+            
+            valeur_risque = total_churned * cltv_moyen
+            st.metric("Clients Perdus × CLTV", f"${valeur_risque:,.0f}")
+            
+            st.markdown(f"""
+            <div style="margin-top: 15px; font-size: 14px;">
+                <strong>Détails:</strong><br>
+                • {total_churned:,} clients churned<br>
+                • CLTV moyen: ${cltv_moyen:,.0f}<br>
+                • Impact: ${valeur_risque:,.0f}
+            </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # ========== 4. SIMULATEUR ROI INTERACTIF ==========
+        st.markdown("### 🎮 Simulateur ROI Campagnes Rétention")
+        
+        st.markdown("""
+        <div style="background: rgba(102, 126, 234, 0.1); padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+            💡 <strong>Mode interactif:</strong> Ajustez les paramètres pour calculer le ROI en temps réel
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col_sim1, col_sim2, col_sim3 = st.columns(3)
+        
+        with col_sim1:
+            retention_rate = st.slider(
+                "📈 Taux de rétention cible",
+                min_value=5,
+                max_value=50,
+                value=30,
+                step=5,
+                help="% de clients churned qu'on peut récupérer"
+            ) / 100
+        
+        with col_sim2:
+            budget_campagne = st.slider(
+                "💵 Budget campagne ($K)",
+                min_value=10,
+                max_value=100,
+                value=50,
+                step=10,
+                help="Investissement marketing/rétention"
+            ) * 1000
+        
+        with col_sim3:
+            cltv_scenario = st.slider(
+                "💎 CLTV ajusté ($)",
+                min_value=2000,
+                max_value=6000,
+                value=int(cltv_moyen),
+                step=500,
+                help="Valeur vie client (ajustable)"
+            )
+        
+        # Calculs ROI
+        clients_recuperes = int(total_churned * retention_rate)
+        gain_brut = clients_recuperes * cltv_scenario
+        gain_net = gain_brut - budget_campagne
+        roi = (gain_net / budget_campagne * 100) if budget_campagne > 0 else 0
+        break_even_clients = int(budget_campagne / cltv_scenario) if cltv_scenario > 0 else 0
+        
+        # Résultats simulateur
+        st.markdown("#### 📊 Résultats simulation")
+        
+        res1, res2, res3, res4 = st.columns(4)
+        
+        res1.metric(
+            "👥 Clients récupérés",
+            f"{clients_recuperes:,}",
+            delta=f"{retention_rate*100:.0f}% de {total_churned:,}"
+        )
+        
+        res2.metric(
+            "💰 Gain brut",
+            f"${gain_brut:,.0f}",
+            delta=f"{clients_recuperes} × ${cltv_scenario:,}"
+        )
+        
+        res3.metric(
+            "📈 ROI",
+            f"{roi:.0f}%",
+            delta=f"Gain net ${gain_net:,.0f}",
+            delta_color="normal" if gain_net > 0 else "inverse"
+        )
+        
+        res4.metric(
+            "⚖️ Break-even",
+            f"{break_even_clients} clients",
+            help="Nombre clients minimum à récupérer"
+        )
+        
+        # Graphique sensibilité
+        st.markdown("#### 📉 Analyse de sensibilité")
+        
+        # Créer scénarios
+        scenarios_retention = [0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50]
+        scenarios_roi = []
+        scenarios_gain = []
+        
+        for rate in scenarios_retention:
+            clients = int(total_churned * rate)
+            gain = clients * cltv_scenario - budget_campagne
+            roi_val = (gain / budget_campagne * 100) if budget_campagne > 0 else 0
+            scenarios_roi.append(roi_val)
+            scenarios_gain.append(gain)
+        
+        fig_sensitivity = go.Figure()
+        
+        fig_sensitivity.add_trace(go.Scatter(
+            x=[r*100 for r in scenarios_retention],
+            y=scenarios_roi,
+            mode='lines+markers',
+            name='ROI (%)',
+            line=dict(color='#3498db', width=3),
+            marker=dict(size=8)
+        ))
+        
+        fig_sensitivity.add_hline(
+            y=0, 
+            line_dash="dash", 
+            line_color="red",
+            annotation_text="Break-even"
+        )
+        
+        fig_sensitivity.add_vline(
+            x=retention_rate*100,
+            line_dash="dot",
+            line_color="yellow",
+            annotation_text=f"Scénario actuel ({retention_rate*100:.0f}%)"
+        )
+        
+        fig_sensitivity.update_layout(
+            title=f"ROI vs Taux de rétention (Budget ${budget_campagne:,.0f})",
+            xaxis_title="Taux de rétention (%)",
+            yaxis_title="ROI (%)",
+            height=400,
+            template="plotly_dark",
+            hovermode='x unified'
+        )
+        
+        st.plotly_chart(fig_sensitivity, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # ========== 5. SCÉNARIOS WHAT-IF ==========
+        st.markdown("### 🔮 Scénarios What-If: Réduction Churn")
+        
+        st.markdown("""
+        💡 **Question:** Si on réduit le churn de X%, quel est le gain financier ?
+        """)
+        
+        # Scénarios multiples
+        reduction_scenarios = [5, 10, 15, 20, 25]
+        scenarios_data = []
+        
+        for reduction in reduction_scenarios:
+            new_churn_rate = churn_rate * (1 - reduction/100)
+            new_churned = int(total_customers * new_churn_rate / 100)
+            clients_sauves = total_churned - new_churned
+            gain_annuel = clients_sauves * cltv_moyen
+            
+            scenarios_data.append({
+                'Réduction Churn': f'-{reduction}%',
+                'Nouveau Taux': f'{new_churn_rate:.1f}%',
+                'Clients Sauvés': clients_sauves,
+                'Gain Annuel': gain_annuel,
+                'ROI si Budget $50K': (gain_annuel / 50000 * 100) if gain_annuel > 0 else 0
+            })
+        
+        df_scenarios = pd.DataFrame(scenarios_data)
+        
+        st.dataframe(
+            df_scenarios.style.format({
+                'Clients Sauvés': '{:,.0f}',
+                'Gain Annuel': '${:,.0f}',
+                'ROI si Budget $50K': '{:.0f}%'
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        # Graphique courbe gain
+        fig_whatif = go.Figure()
+        
+        fig_whatif.add_trace(go.Bar(
+            x=[s['Réduction Churn'] for s in scenarios_data],
+            y=[s['Gain Annuel'] for s in scenarios_data],
+            marker_color='#27ae60',
+            text=[f"${s['Gain Annuel']:,.0f}" for s in scenarios_data],
+            textposition='auto',
+        ))
+        
+        fig_whatif.update_layout(
+            title="Gain financier selon réduction du churn",
+            xaxis_title="Réduction churn",
+            yaxis_title="Gain annuel ($)",
+            height=400,
+            template="plotly_dark"
+        )
+        
+        st.plotly_chart(fig_whatif, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # ========== 6. MÉTRIQUES AVANCÉES CFO ==========
+        st.markdown("### 📊 Métriques Avancées (CFO)")
+        
+        # Calculs métriques
+        cac_estimate = 500  # Customer Acquisition Cost estimé
+        ltv_cac_ratio = cltv_moyen / cac_estimate if cac_estimate > 0 else 0
+        churn_cost_per_customer = pertes_totales / total_churned if total_churned > 0 else 0
+        
+        if 'Tenure in Months' in df_temp.columns:
+            payback_months = df_temp['Tenure in Months'].median()
+        else:
+            payback_months = 24
+        
+        metr1, metr2, metr3, metr4 = st.columns(4)
+        
+        metr1.metric(
+            "💼 LTV/CAC Ratio",
+            f"{ltv_cac_ratio:.1f}",
+            delta="Benchmark: 3.0" if ltv_cac_ratio >= 3 else "< Benchmark 3.0",
+            delta_color="normal" if ltv_cac_ratio >= 3 else "inverse",
+            help="Customer Lifetime Value / Customer Acquisition Cost"
+        )
+        
+        metr2.metric(
+            "⏱️ Payback Period",
+            f"{payback_months:.0f} mois",
+            help="Temps moyen pour rentabiliser acquisition"
+        )
+        
+        metr3.metric(
+            "💸 Churn Cost/Client",
+            f"${churn_cost_per_customer:,.0f}",
+            help="Coût moyen par client perdu"
+        )
+        
+        metr4.metric(
+            "🎯 CAC Estimé",
+            f"${cac_estimate:,.0f}",
+            help="Customer Acquisition Cost"
+        )
+        
+        # Explication métriques
+        with st.expander("📚 Comprendre les métriques CFO"):
+            st.markdown("""
+            **LTV/CAC Ratio (Lifetime Value / Customer Acquisition Cost)**
+            - Ratio optimal : **3:1** ou plus
+            - < 3 : Acquisition trop coûteuse
+            - > 5 : Excellent, sous-investissement possible
+            
+            **Payback Period**
+            - Temps pour récupérer coût acquisition
+            - Optimal : < 12 mois
+            - Acceptable : 12-18 mois
+            
+            **Churn Cost per Customer**
+            - Valeur moyenne perdue par client churned
+            - Inclut CLTV et coûts opportunité
+            
+            **Benchmark Industrie Télécom**
+            - Churn rate : 15-25% (vous: {:.1f}%)
+            - LTV/CAC : 3-5x
+            - Payback : 6-18 mois
+            """.format(churn_rate))
+        
+    except Exception as e:
+        import traceback
+        st.error(f"❌ Erreur: {str(e)}")
+        with st.expander("🔍 Détails techniques"):
+            st.code(traceback.format_exc())
+
 
 def render_geography_tab(df: pd.DataFrame):
     """Onglet Géographie avec 3 modes et visualisations alternatives (sans cartes)"""
