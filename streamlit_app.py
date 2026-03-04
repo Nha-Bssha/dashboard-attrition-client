@@ -2326,16 +2326,16 @@ def render_satisfaction_tab(df: pd.DataFrame):
                                 textposition='middle center',
                                 textfont=dict(color='white', size=11, family='Arial Black'),
                                 hovertemplate=f'''
-<b>{row['Age_Group']}</b><br>
-Population: {int(row['Population']):,} clients ({row['Population']/len(df_clean)*100:.1f}%)<br>
-Churn: {row['Churn_Rate']:.1f}% (Global: {churn_global:.1f}%)<br>
-Satisfaction: {row['Avg_Satisfaction']:.2f}/5<br>
-<br>
-💰 Revenue à risque: ${row['Revenue_At_Risk']:,.0f}<br>
-📈 Gain potentiel: ${row['Potential_Gain']:,.0f}<br>
-🎯 Risque: {risk_label}
-<extra></extra>
-''',
+                                <b>{row['Age_Group']}</b><br>
+                                Population: {int(row['Population']):,} clients ({row['Population']/len(df_clean)*100:.1f}%)<br>
+                                Churn: {row['Churn_Rate']:.1f}% (Global: {churn_global:.1f}%)<br>
+                                Satisfaction: {row['Avg_Satisfaction']:.2f}/5<br>
+                                <br>
+                                💰 Revenue à risque: ${row['Revenue_At_Risk']:,.0f}<br>
+                                📈 Gain potentiel: ${row['Potential_Gain']:,.0f}<br>
+                                🎯 Risque: {risk_label}
+                                <extra></extra>
+                                ''',
                                 showlegend=False
                             ))
                         
@@ -2416,25 +2416,25 @@ Satisfaction: {row['Avg_Satisfaction']:.2f}/5<br>
                                 
                                 # ✅ INDENTATION CORRECTE - st.markdown au bon niveau
                                 st.markdown(f"""
-<div style="background: {color}22; padding: 12px; border-radius: 8px; border-left: 4px solid {color}; margin-bottom: 12px;">
-    <div style="font-size: 11px; color: #888; margin-bottom: 5px;">{icon} {priority_label}</div>
-    <div style="font-size: 20px; font-weight: 700; color: {color}; margin-bottom: 8px;">{segment['Age_Group']}</div>
-    
-    <div style="font-size: 12px; line-height: 1.6;">
-        <strong>{int(segment['Population']):,}</strong> clients ({segment['Population']/len(df_clean)*100:.1f}%)<br>
-        Churn: <strong style="color:{color};">{segment['Churn_Rate']:.0f}%</strong> vs {churn_global:.0f}% global<br>
-        Satisfaction: <strong>{segment['Avg_Satisfaction']:.2f}/5</strong><br>
-    </div>
-    
-    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid {color}44;">
-        <div style="font-size: 11px; color: #aaa;">💰 Perte annuelle</div>
-        <div style="font-size: 16px; font-weight: 700; color: {color};">${segment['Revenue_At_Risk']/1000:.0f}K</div>
-        
-        <div style="font-size: 11px; color: #aaa; margin-top: 5px;">📈 Gain potentiel</div>
-        <div style="font-size: 14px; font-weight: 600; color: #27ae60;">${segment['Potential_Gain']/1000:.0f}K</div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+                                <div style="background: {color}22; padding: 12px; border-radius: 8px; border-left: 4px solid {color}; margin-bottom: 12px;">
+                                    <div style="font-size: 11px; color: #888; margin-bottom: 5px;">{icon} {priority_label}</div>
+                                    <div style="font-size: 20px; font-weight: 700; color: {color}; margin-bottom: 8px;">{segment['Age_Group']}</div>
+                                    
+                                    <div style="font-size: 12px; line-height: 1.6;">
+                                        <strong>{int(segment['Population']):,}</strong> clients ({segment['Population']/len(df_clean)*100:.1f}%)<br>
+                                        Churn: <strong style="color:{color};">{segment['Churn_Rate']:.0f}%</strong> vs {churn_global:.0f}% global<br>
+                                        Satisfaction: <strong>{segment['Avg_Satisfaction']:.2f}/5</strong><br>
+                                    </div>
+                                    
+                                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid {color}44;">
+                                        <div style="font-size: 11px; color: #aaa;">💰 Perte annuelle</div>
+                                        <div style="font-size: 16px; font-weight: 700; color: {color};">${segment['Revenue_At_Risk']/1000:.0f}K</div>
+                                        
+                                        <div style="font-size: 11px; color: #aaa; margin-top: 5px;">📈 Gain potentiel</div>
+                                        <div style="font-size: 14px; font-weight: 600; color: #27ae60;">${segment['Potential_Gain']/1000:.0f}K</div>
+                                    </div>
+                                </div>
+                                """, unsafe_allow_html=True)
                         
                         # Actions recommandées (même niveau que la boucle)
                         worst_segment = top_segments.iloc[0]
@@ -2450,14 +2450,14 @@ Satisfaction: {row['Avg_Satisfaction']:.2f}/5<br>
                             tactics = "• Incentives personnalisés<br>• CSM proactif<br>• Upgrade facilité"
                         
                         st.markdown(f"""
-<div style="background: rgba(102,126,234,0.2); padding: 15px; border-radius: 10px; border: 2px solid #667eea; margin-top: 15px;">
-    <div style="font-size: 13px; font-weight: 700; color: #667eea; margin-bottom: 8px;">→ ACTION RECOMMANDÉE</div>
-    <div style="font-size: 15px; font-weight: 600; margin-bottom: 8px;">{action}</div>
-    <div style="font-size: 12px; line-height: 1.6; color: #ccc;">
-        {tactics}
-    </div>
-</div>
-""", unsafe_allow_html=True)
+                        <div style="background: rgba(102,126,234,0.2); padding: 15px; border-radius: 10px; border: 2px solid #667eea; margin-top: 15px;">
+                            <div style="font-size: 13px; font-weight: 700; color: #667eea; margin-bottom: 8px;">→ ACTION RECOMMANDÉE</div>
+                            <div style="font-size: 15px; font-weight: 600; margin-bottom: 8px;">{action}</div>
+                            <div style="font-size: 12px; line-height: 1.6; color: #ccc;">
+                                {tactics}
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
                     
                     # === KPI CARDS BOTTOM ===
                     st.markdown("---")
@@ -2505,19 +2505,19 @@ Satisfaction: {row['Avg_Satisfaction']:.2f}/5<br>
                     
                     # === CALL TO ACTION ===
                     st.markdown(f"""
-<div style='background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); 
-            padding: 20px; border-radius: 12px; margin: 20px 0; text-align: center;'>
-    <h3 style='color: white; margin: 0 0 10px 0;'>⚡ ACTION IMMÉDIATE REQUISE</h3>
-    <p style='color: white; font-size: 16px; margin: 0;'>
-        <strong>{int(total_clients_risk):,} clients</strong> à haut risque de churn dans segments 60+<br>
-        <strong style='font-size: 24px; color: #2ecc71;'>${total_gain_potential/1000000:.2f}M</strong> récupérables avec programme ciblé<br><br>
-        
-        <span style='background: white; color: #e74c3c; padding: 10px 20px; border-radius: 6px; font-weight: 700; display: inline-block; margin-top: 10px;'>
-            → LANCER CAMPAGNE SENIORS D+7
-        </span>
-    </p>
-</div>
-""", unsafe_allow_html=True)
+                    <div style='background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); 
+                                padding: 20px; border-radius: 12px; margin: 20px 0; text-align: center;'>
+                        <h3 style='color: white; margin: 0 0 10px 0;'>⚡ ACTION IMMÉDIATE REQUISE</h3>
+                        <p style='color: white; font-size: 16px; margin: 0;'>
+                            <strong>{int(total_clients_risk):,} clients</strong> à haut risque de churn dans segments 60+<br>
+                            <strong style='font-size: 24px; color: #2ecc71;'>${total_gain_potential/1000000:.2f}M</strong> récupérables avec programme ciblé<br><br>
+                            
+                            <span style='background: white; color: #e74c3c; padding: 10px 20px; border-radius: 6px; font-weight: 700; display: inline-block; margin-top: 10px;'>
+                                → LANCER CAMPAGNE SENIORS D+7
+                            </span>
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
             
             except Exception as e:
                 st.error(f"❌ Erreur analyse âge: {str(e)}")
@@ -2680,17 +2680,17 @@ Satisfaction: {row['Avg_Satisfaction']:.2f}/5<br>
         potential = int(det_lost * 0.5) * 4149
         
         st.markdown(f"""
-<div style='background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); 
-            padding: 25px; border-radius: 15px; margin: 20px 0;'>
-    <h3 style='color: white;'>🚨 ACTION PRIORITAIRE</h3>
-    <p style='color: white; font-size: 16px;'>
-        <strong>Ratio {ratio:.1f}x</strong> - Detractors vs Promoters<br>
-        <strong>{det_lost:,} clients</strong> Detractors perdus<br><br>
-        
-        <strong style='color:#2ecc71;font-size:20px;'>💰 Gain: ${potential:,.0f}</strong>
-    </p>
-</div>
-""", unsafe_allow_html=True)
+        <div style='background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); 
+                    padding: 25px; border-radius: 15px; margin: 20px 0;'>
+            <h3 style='color: white;'>🚨 ACTION PRIORITAIRE</h3>
+            <p style='color: white; font-size: 16px;'>
+                <strong>Ratio {ratio:.1f}x</strong> - Detractors vs Promoters<br>
+                <strong>{det_lost:,} clients</strong> Detractors perdus<br><br>
+                
+                <strong style='color:#2ecc71;font-size:20px;'>💰 Gain: ${potential:,.0f}</strong>
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
         
         # ⭐⭐⭐ SIMULATEUR NPS ⭐⭐⭐
         st.markdown("---")
