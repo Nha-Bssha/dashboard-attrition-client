@@ -1971,9 +1971,8 @@ def render_behavior_tab(df: pd.DataFrame):
 
 
 # ------------------------------------------------
-
 def render_satisfaction_tab(df: pd.DataFrame):
-    """Onglet Satisfaction - Version fonctionnelle garantie"""
+    """Onglet Satisfaction - Version SANS HTML + Corrélation Age/Satisfaction"""
     
     st.markdown("""
     <style>
@@ -2109,7 +2108,158 @@ def render_satisfaction_tab(df: pd.DataFrame):
         st.markdown("---")
         
         # ========================================
-        # SECTION 2: SUNBURST
+        # SECTION 2: CORRÉLATION ÂGE × SATISFACTION (NOUVEAU)
+        # ========================================
+        
+        st.markdown("### 📊 Corrélation Âge × Satisfaction × Churn")
+        
+        if 'Age' in df_temp.columns:
+            # Filtrer données valides
+            df_clean = df_temp[['Age', 'Satisfaction Score', 'NPS_Category', 'Is_Churned']].dropna()
+            
+            if 'CLTV' in df_temp.columns:
+                df_clean['CLTV'] = df_temp.loc[df_clean.index, 'CLTV']
+            else:
+                df_clean['CLTV'] = 4149
+            
+            if len(df_clean) > 0:
+                col_corr1, col_corr2 = st.columns([2, 1])
+                
+                with col_corr1:
+                    # === SCATTER PLOT: Âge × Satisfaction (points colorés par Churn) ===
+                    
+                    # Calculer satisfaction moyenne par âge
+                    age_sat = df_clean.groupby('Age', as_index=False).agg({
+                        'Satisfaction Score': 'mean',
+                        'Is_Churned': 'mean'
+                    })
+                    age_sat['Churn_Rate'] = age_sat['Is_Churned'] * 100
+                    
+                    # Calcul corrélation
+                    from scipy.stats import pearsonr
+                    corr_coef, p_value = pearsonr(age_sat['Age'], age_sat['Satisfaction Score'])
+                    
+                    fig_scatter = go.Figure()
+                    
+                    # Points individuels (âge × satisfaction)
+                    fig_scatter.add_trace(go.Scatter(
+                        x=age_sat['Age'],
+                        y=age_sat['Satisfaction Score'],
+                        mode='markers',
+                        marker=dict(
+                            size=12,
+                            color=age_sat['Churn_Rate'],
+                            colorscale='RdYlGn_r',
+                            showscale=True,
+                            colorbar=dict(title="Churn %", x=1.15),
+                            line=dict(width=1, color='white')
+                        ),
+                        text=[f"Âge: {int(age)}<br>Sat: {sat:.2f}<br>Churn: {churn:.1f}%" 
+                              for age, sat, churn in zip(age_sat['Age'], 
+                                                         age_sat['Satisfaction Score'], 
+                                                         age_sat['Churn_Rate'])],
+                        hovertemplate='%{text}<extra></extra>',
+                        name='Clients'
+                    ))
+                    
+                    # Ligne de tendance (régression linéaire)
+                    from scipy.stats import linregress
+                    slope, intercept, r_value, p_val, std_err = linregress(age_sat['Age'], 
+                                                                           age_sat['Satisfaction Score'])
+                    
+                    line_x = np.array([age_sat['Age'].min(), age_sat['Age'].max()])
+                    line_y = slope * line_x + intercept
+                    
+                    fig_scatter.add_trace(go.Scatter(
+                        x=line_x,
+                        y=line_y,
+                        mode='lines',
+                        line=dict(color='#f39c12', width=3, dash='dash'),
+                        name=f'Tendance (r={corr_coef:.3f})'
+                    ))
+                    
+                    fig_scatter.update_layout(
+                        title=dict(
+                            text=f"<b>Âge × Satisfaction | Corrélation: {corr_coef:.3f} ({'Positive' if corr_coef > 0 else 'Négative'})</b>",
+                            font=dict(size=16, color='white'),
+                            x=0.5,
+                            xanchor='center'
+                        ),
+                        xaxis=dict(
+                            title="<b>Âge du client</b>",
+                            showgrid=True,
+                            gridcolor='rgba(255,255,255,0.1)'
+                        ),
+                        yaxis=dict(
+                            title="<b>Satisfaction moyenne</b>",
+                            showgrid=True,
+                            gridcolor='rgba(255,255,255,0.1)'
+                        ),
+                        template='plotly_dark',
+                        height=500,
+                        hovermode='closest'
+                    )
+                    
+                    st.plotly_chart(fig_scatter, use_container_width=True)
+                
+                with col_corr2:
+                    # === INSIGHTS CORRÉLATION ===
+                    st.markdown("**📊 Analyse Statistique:**")
+                    
+                    # Coefficient corrélation
+                    if abs(corr_coef) > 0.7:
+                        corr_strength = "Très forte"
+                        corr_color = "#27ae60"
+                    elif abs(corr_coef) > 0.4:
+                        corr_strength = "Modérée"
+                        corr_color = "#f39c12"
+                    elif abs(corr_coef) > 0.2:
+                        corr_strength = "Faible"
+                        corr_color = "#e74c3c"
+                    else:
+                        corr_strength = "Très faible"
+                        corr_color = "#95a5a6"
+                    
+                    st.markdown(f"""
+<div style="background: {corr_color}22; padding: 15px; border-radius: 8px; border-left: 4px solid {corr_color}; margin-bottom: 15px;">
+    <strong>Corrélation:</strong><br>
+    r = {corr_coef:.3f}<br>
+    p-value = {'<0.001' if p_value < 0.001 else f'{p_value:.4f}'}<br>
+    <strong style="color: {corr_color};">{corr_strength}</strong>
+</div>
+""", unsafe_allow_html=True)
+                    
+                    # Interprétation
+                    if corr_coef > 0:
+                        interpretation = "✅ Les clients plus âgés sont PLUS satisfaits"
+                        recommendation = "• Valoriser expérience seniors<br>• Programmes fidélité âge"
+                    else:
+                        interpretation = "⚠️ Les clients plus âgés sont MOINS satisfaits"
+                        recommendation = "• Support dédié seniors<br>• Simplification services"
+                    
+                    st.markdown(f"""
+**💡 Interprétation:**  
+{interpretation}
+
+**🎯 Recommandations:**  
+{recommendation}
+""")
+                    
+                    # Top/Bottom âges
+                    age_extremes = age_sat.nlargest(3, 'Satisfaction Score')
+                    st.markdown("**👍 Top 3 Âges (meilleure sat):**")
+                    for _, row in age_extremes.iterrows():
+                        st.markdown(f"• **{int(row['Age'])} ans** : {row['Satisfaction Score']:.2f}/5")
+                    
+                    age_worst = age_sat.nsmallest(3, 'Satisfaction Score')
+                    st.markdown("**👎 Bottom 3 Âges (pire sat):**")
+                    for _, row in age_worst.iterrows():
+                        st.markdown(f"• **{int(row['Age'])} ans** : {row['Satisfaction Score']:.2f}/5")
+        
+        st.markdown("---")
+        
+        # ========================================
+        # SECTION 3: SUNBURST
         # ========================================
         
         st.markdown("### 🎨 Hiérarchie Satisfaction Interactive")
@@ -2172,455 +2322,74 @@ def render_satisfaction_tab(df: pd.DataFrame):
         st.markdown("---")
         
         # ========================================
-        # SECTION 3: HEATMAP (BUG FIXÉ)
+        # SECTION 4: ACTIONS PRIORITAIRES (SANS HTML VISIBLE)
         # ========================================
         
-        st.markdown("### 🔥 Impact Satisfaction sur Churn")
+        st.markdown("### 🎯 Actions Prioritaires - Segments à Risque")
         
-        heatmap_data = []
-        for nps_cat in ['Detractors', 'Passives', 'Promoters']:
-            for score in [1, 2, 3, 4, 5]:
-                df_seg = df_temp[(df_temp['NPS_Category'] == nps_cat) & 
-                                (df_temp['Satisfaction Score'] == score)]
-                if len(df_seg) >= 10:
-                    churn_rate = (df_seg['Is_Churned'].sum() / len(df_seg)) * 100
-                    heatmap_data.append({
-                        'NPS': nps_cat,
-                        'Score': score,
-                        'Churn_Rate': churn_rate,
-                        'Population': len(df_seg)
-                    })
-        
-        if len(heatmap_data) > 0:
-            df_heatmap = pd.DataFrame(heatmap_data)
-            pivot_heatmap = df_heatmap.pivot(index='Score', columns='NPS', values='Churn_Rate')
-            pivot_pop = df_heatmap.pivot(index='Score', columns='NPS', values='Population')
-            
-            text_matrix = []
-            for row_idx in range(len(pivot_heatmap.index)):
-                row_text = []
-                for col_idx in range(len(pivot_heatmap.columns)):
-                    val = pivot_heatmap.iloc[row_idx, col_idx]
-                    pop = pivot_pop.iloc[row_idx, col_idx]
-                    
-                    if pd.notna(val) and pd.notna(pop):
-                        row_text.append(f"{val:.0f}%<br>({int(pop):,})")
-                    else:
-                        row_text.append("")
-                
-                text_matrix.append(row_text)
-            
-            fig_heatmap = go.Figure(data=go.Heatmap(
-                z=pivot_heatmap.values,
-                x=pivot_heatmap.columns,
-                y=pivot_heatmap.index,
-                text=text_matrix,
-                texttemplate='%{text}',
-                textfont={"size": 14, "color": "white"},
-                colorscale='RdYlGn_r',
-                colorbar=dict(title="Churn %"),
-                hovertemplate='<b>Score %{y} - %{x}</b><br>Churn: %{z:.1f}%<extra></extra>'
-            ))
-            
-            fig_heatmap.update_layout(
-                title="<b>Taux de Churn par Score × Catégorie NPS</b>",
-                xaxis_title="<b>Catégorie NPS</b>",
-                yaxis_title="<b>Score Satisfaction</b>",
-                template="plotly_dark",
-                height=450
-            )
-            
-            st.plotly_chart(fig_heatmap, use_container_width=True)
-        
-        st.markdown("---")
-        
-        # ========================================
-        # SECTION 4: ANALYSE ÂGE (CORRIGÉE - INDENTATION FIXÉE)
-        # ========================================
-        
-        st.markdown("### 💰 Impact Âge : Churn & Revenue à Risque")
-        
+        # Analyser segments critiques
         if 'Age' in df_temp.columns:
-            try:
-                # Filtrer données valides
-                df_clean = df_temp[['Age', 'Satisfaction Score', 'NPS_Category', 'Is_Churned']].dropna()
+            df_analysis = df_temp[df_temp['Satisfaction Score'] <= 2].copy()  # Detractors
+            
+            if len(df_analysis) > 0:
+                # Calculer stats par âge (sans tranches)
+                age_risk = df_analysis.groupby('Age', as_index=False).agg({
+                    'customerID': 'count',
+                    'Satisfaction Score': 'mean'
+                })
+                age_risk.columns = ['Age', 'Clients_Insatisfaits', 'Sat_Moyenne']
+                age_risk = age_risk[age_risk['Clients_Insatisfaits'] >= 10]  # Min 10 clients
+                age_risk = age_risk.nlargest(5, 'Clients_Insatisfaits')
                 
-                # Ajouter CLTV si disponible
-                if 'CLTV' in df_temp.columns:
-                    df_clean['CLTV'] = df_temp.loc[df_clean.index, 'CLTV']
-                    cltv_avg = df_clean['CLTV'].mean()
-                else:
-                    cltv_avg = 4149  # Fallback
-                    df_clean['CLTV'] = cltv_avg
+                col_act1, col_act2 = st.columns([2, 1])
                 
-                if len(df_clean) > 0:
-                    # === SEGMENTATION PAR TRANCHES D'ÂGE ===
-                    bins = [18, 30, 40, 50, 60, 70, 100]
-                    labels = ['18-29', '30-39', '40-49', '50-59', '60-69', '70+']
-                    df_clean['Age_Group'] = pd.cut(df_clean['Age'], bins=bins, labels=labels)
+                with col_act1:
+                    # Bar chart horizontal
+                    fig_actions = go.Figure(go.Bar(
+                        y=[f"{int(age)} ans" for age in age_risk['Age']],
+                        x=age_risk['Clients_Insatisfaits'],
+                        orientation='h',
+                        marker=dict(color='#e74c3c'),
+                        text=age_risk['Clients_Insatisfaits'],
+                        textposition='outside'
+                    ))
                     
-                    # Calculer métriques business par segment
-                    age_metrics = df_clean.groupby('Age_Group', observed=True).agg({
-                        'Age': 'count',
-                        'Satisfaction Score': 'mean',
-                        'Is_Churned': 'mean',
-                        'CLTV': 'mean'
-                    }).reset_index()
+                    fig_actions.update_layout(
+                        title="Top 5 Âges - Clients insatisfaits (Score ≤2)",
+                        xaxis_title="Nombre de clients",
+                        yaxis_title="",
+                        height=350,
+                        template="plotly_dark"
+                    )
                     
-                    age_metrics.columns = ['Age_Group', 'Population', 'Avg_Satisfaction', 'Churn_Rate', 'Avg_CLTV']
+                    st.plotly_chart(fig_actions, use_container_width=True)
+                
+                with col_act2:
+                    st.markdown("**🎯 Actions recommandées:**")
                     
-                    # Calculs business
-                    age_metrics['Churn_Rate'] = age_metrics['Churn_Rate'] * 100
-                    age_metrics['Clients_Lost'] = (age_metrics['Population'] * age_metrics['Churn_Rate'] / 100).astype(int)
-                    age_metrics['Revenue_At_Risk'] = age_metrics['Clients_Lost'] * age_metrics['Avg_CLTV']
-                    
-                    # Churn global pour comparaison
-                    churn_global = df_clean['Is_Churned'].mean() * 100
-                    
-                    # Identifier segments à forte déviation
-                    age_metrics['Churn_Delta'] = age_metrics['Churn_Rate'] - churn_global
-                    age_metrics['Priority'] = age_metrics['Churn_Delta'].abs() * age_metrics['Population']
-                    age_metrics = age_metrics.sort_values('Priority', ascending=False)
-                    
-                    # Potentiel si satisfaction +1 point (hypothèse: -15% churn par point)
-                    age_metrics['Potential_Gain'] = age_metrics['Revenue_At_Risk'] * 0.5  # 50% récupérable
-                    
-                    # === GRAPHIQUE BUBBLE CHART ===
-                    col_graph, col_action = st.columns([2.5, 1])
-                    
-                    with col_graph:
-                        fig_bubble = go.Figure()
+                    for _, row in age_risk.head(3).iterrows():
+                        age = int(row['Age'])
+                        clients = int(row['Clients_Insatisfaits'])
                         
-                        # Créer bubbles
-                        colors_map = {
-                            'high_risk': '#e74c3c',    # Rouge: churn > global +15%
-                            'medium_risk': '#f39c12',  # Orange: churn > global
-                            'low_risk': '#27ae60'      # Vert: churn < global
-                        }
-                        
-                        for idx, row in age_metrics.iterrows():
-                            # Déterminer couleur selon risque
-                            if row['Churn_Delta'] > 15:
-                                color = colors_map['high_risk']
-                                risk_label = "CRITIQUE"
-                            elif row['Churn_Delta'] > 0:
-                                color = colors_map['medium_risk']
-                                risk_label = "MOYEN"
-                            else:
-                                color = colors_map['low_risk']
-                                risk_label = "OK"
-                            
-                            fig_bubble.add_trace(go.Scatter(
-                                x=[row['Age_Group']],
-                                y=[row['Churn_Rate']],
-                                mode='markers+text',
-                                name=row['Age_Group'],
-                                marker=dict(
-                                    size=row['Population'] / 30,  # Taille proportionnelle
-                                    color=color,
-                                    opacity=0.8,
-                                    line=dict(width=2, color='white')
-                                ),
-                                text=f"{row['Age_Group']}<br>{row['Churn_Rate']:.0f}%",
-                                textposition='middle center',
-                                textfont=dict(color='white', size=11, family='Arial Black'),
-                                hovertemplate=f'''
-                                <b>{row['Age_Group']}</b><br>
-                                Population: {int(row['Population']):,} clients ({row['Population']/len(df_clean)*100:.1f}%)<br>
-                                Churn: {row['Churn_Rate']:.1f}% (Global: {churn_global:.1f}%)<br>
-                                Satisfaction: {row['Avg_Satisfaction']:.2f}/5<br>
-                                <br>
-                                💰 Revenue à risque: ${row['Revenue_At_Risk']:,.0f}<br>
-                                📈 Gain potentiel: ${row['Potential_Gain']:,.0f}<br>
-                                🎯 Risque: {risk_label}
-                                <extra></extra>
-                                ''',
-                                showlegend=False
-                            ))
-                        
-                        # Ligne churn global (baseline)
-                        fig_bubble.add_hline(
-                            y=churn_global,
-                            line_dash="dash",
-                            line_color="yellow",
-                            line_width=2,
-                            annotation_text=f"Churn Global: {churn_global:.1f}%",
-                            annotation_position="right"
-                        )
-                        
-                        # Zone de risque critique
-                        fig_bubble.add_hrect(
-                            y0=churn_global + 15,
-                            y1=100,
-                            fillcolor="red",
-                            opacity=0.1,
-                            line_width=0,
-                            annotation_text="Zone Critique",
-                            annotation_position="top right"
-                        )
-                        
-                        fig_bubble.update_layout(
-                            title=dict(
-                                text="<b>Churn par Âge : Taille = Population | Couleur = Risque</b>",
-                                font=dict(size=16, color='white'),
-                                x=0.5,
-                                xanchor='center'
-                            ),
-                            xaxis=dict(
-                                title="<b>Tranche d'Âge</b>",
-                                showgrid=False,
-                                color='white',
-                                tickfont=dict(size=12)
-                            ),
-                            yaxis=dict(
-                                title="<b>Taux de Churn (%)</b>",
-                                showgrid=True,
-                                gridcolor='rgba(255,255,255,0.1)',
-                                color='white',
-                                range=[0, max(age_metrics['Churn_Rate']) * 1.15]
-                            ),
-                            template='plotly_dark',
-                            plot_bgcolor='rgba(30, 30, 46, 0.95)',
-                            paper_bgcolor='rgba(0,0,0,0)',
-                            height=500,
-                            margin=dict(l=60, r=40, t=80, b=60),
-                            hovermode='closest'
-                        )
-                        
-                        st.plotly_chart(fig_bubble, use_container_width=True)
-                    
-                    # ⭐⭐⭐ CORRECTION INDENTATION ICI ⭐⭐⭐
-                    with col_action:
-                        st.markdown("### 🎯 Actions Prioritaires")
-                        
-                        # TOP 3 segments à risque
-                        top_segments = age_metrics.nlargest(3, 'Priority')
-                        
-                        for idx, (i, segment) in enumerate(top_segments.iterrows()):
-                            if segment['Churn_Delta'] > 0:  # Seulement si au-dessus global
-                                
-                                # Icone et couleur selon rang
-                                if idx == 0:
-                                    icon = "🚨"
-                                    priority_label = "PRIORITÉ #1"
-                                    color = "#e74c3c"
-                                elif idx == 1:
-                                    icon = "⚠️"
-                                    priority_label = "PRIORITÉ #2"
-                                    color = "#f39c12"
-                                else:
-                                    icon = "💡"
-                                    priority_label = "PRIORITÉ #3"
-                                    color = "#3498db"
-                                
-                                # ✅ INDENTATION CORRECTE - st.markdown au bon niveau
-                                st.markdown(f"""
-                                <div style="background: {color}22; padding: 12px; border-radius: 8px; border-left: 4px solid {color}; margin-bottom: 12px;">
-                                    <div style="font-size: 11px; color: #888; margin-bottom: 5px;">{icon} {priority_label}</div>
-                                    <div style="font-size: 20px; font-weight: 700; color: {color}; margin-bottom: 8px;">{segment['Age_Group']}</div>
-                                    
-                                    <div style="font-size: 12px; line-height: 1.6;">
-                                        <strong>{int(segment['Population']):,}</strong> clients ({segment['Population']/len(df_clean)*100:.1f}%)<br>
-                                        Churn: <strong style="color:{color};">{segment['Churn_Rate']:.0f}%</strong> vs {churn_global:.0f}% global<br>
-                                        Satisfaction: <strong>{segment['Avg_Satisfaction']:.2f}/5</strong><br>
-                                    </div>
-                                    
-                                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid {color}44;">
-                                        <div style="font-size: 11px; color: #aaa;">💰 Perte annuelle</div>
-                                        <div style="font-size: 16px; font-weight: 700; color: {color};">${segment['Revenue_At_Risk']/1000:.0f}K</div>
-                                        
-                                        <div style="font-size: 11px; color: #aaa; margin-top: 5px;">📈 Gain potentiel</div>
-                                        <div style="font-size: 14px; font-weight: 600; color: #27ae60;">${segment['Potential_Gain']/1000:.0f}K</div>
-                                    </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                        
-                        # Actions recommandées (même niveau que la boucle)
-                        worst_segment = top_segments.iloc[0]
-                        
-                        if '70+' in worst_segment['Age_Group'] or '60-69' in worst_segment['Age_Group']:
-                            action = "Programme Seniors Premium"
-                            tactics = "• Tech Support dédié<br>• Interface simplifiée<br>• Tarif senior -15%"
-                        elif '18-29' in worst_segment['Age_Group']:
-                            action = "Offre Jeunes & Digital"
-                            tactics = "• App mobile exclusive<br>• Streaming inclus<br>• Paiement flexible"
+                        # Déterminer action selon âge
+                        if age >= 65:
+                            action = "Programme Seniors"
+                        elif age <= 30:
+                            action = "Offre Jeunes"
                         else:
-                            action = "Programme Rétention Ciblée"
-                            tactics = "• Incentives personnalisés<br>• CSM proactif<br>• Upgrade facilité"
+                            action = "Support Renforcé"
                         
-                        st.markdown(f"""
-                        <div style="background: rgba(102,126,234,0.2); padding: 15px; border-radius: 10px; border: 2px solid #667eea; margin-top: 15px;">
-                            <div style="font-size: 13px; font-weight: 700; color: #667eea; margin-bottom: 8px;">→ ACTION RECOMMANDÉE</div>
-                            <div style="font-size: 15px; font-weight: 600; margin-bottom: 8px;">{action}</div>
-                            <div style="font-size: 12px; line-height: 1.6; color: #ccc;">
-                                {tactics}
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    # === KPI CARDS BOTTOM ===
-                    st.markdown("---")
-                    
-                    # Calculer totaux segments à risque
-                    high_risk_segments = age_metrics[age_metrics['Churn_Delta'] > 0]
-                    
-                    total_at_risk = high_risk_segments['Revenue_At_Risk'].sum()
-                    total_clients_risk = high_risk_segments['Population'].sum()
-                    total_gain_potential = high_risk_segments['Potential_Gain'].sum()
-                    
-                    # Budget estimé (15% du gain potentiel)
-                    budget_needed = total_gain_potential * 0.15
-                    roi_estimated = (total_gain_potential - budget_needed) / budget_needed * 100 if budget_needed > 0 else 0
-                    
-                    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-                    
-                    kpi1.metric(
-                        "💰 Revenue à Risque",
-                        f"${total_at_risk/1000000:.2f}M",
-                        delta=f"Segments 60+",
-                        help=f"Perte annuelle si churn continue - {len(high_risk_segments)} segments"
-                    )
-                    
-                    kpi2.metric(
-                        "🎯 Clients Ciblés",
-                        f"{int(total_clients_risk):,}",
-                        delta=f"{total_clients_risk/len(df_clean)*100:.0f}% de la base",
-                        help="Population totale segments à haut risque"
-                    )
-                    
-                    kpi3.metric(
-                        "📈 Gain Potentiel",
-                        f"${total_gain_potential/1000000:.2f}M",
-                        delta="Si satisfaction +1 pt",
-                        help="Revenue récupérable avec actions ciblées"
-                    )
-                    
-                    kpi4.metric(
-                        "🚀 ROI Campagne",
-                        f"{roi_estimated:.0f}%",
-                        delta=f"Budget: ${budget_needed/1000:.0f}K",
-                        help="Retour sur investissement estimé"
-                    )
-                    
-                    # === CALL TO ACTION ===
-                    st.markdown(f"""
-                    <div style='background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); 
-                                padding: 20px; border-radius: 12px; margin: 20px 0; text-align: center;'>
-                        <h3 style='color: white; margin: 0 0 10px 0;'>⚡ ACTION IMMÉDIATE REQUISE</h3>
-                        <p style='color: white; font-size: 16px; margin: 0;'>
-                            <strong>{int(total_clients_risk):,} clients</strong> à haut risque de churn dans segments 60+<br>
-                            <strong style='font-size: 24px; color: #2ecc71;'>${total_gain_potential/1000000:.2f}M</strong> récupérables avec programme ciblé<br><br>
-                            
-                            <span style='background: white; color: #e74c3c; padding: 10px 20px; border-radius: 6px; font-weight: 700; display: inline-block; margin-top: 10px;'>
-                                → LANCER CAMPAGNE SENIORS D+7
-                            </span>
-                        </p>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            except Exception as e:
-                st.error(f"❌ Erreur analyse âge: {str(e)}")
-                import traceback
-                st.code(traceback.format_exc())
+                        # Afficher SANS HTML (juste du texte)
+                        st.info(f"""
+**{age} ans** : {clients} clients insatisfaits  
+→ {action}  
+Impact: ${clients * 4149:,.0f}
+""")
         
         st.markdown("---")
         
         # ========================================
-        # SECTION 5: OFFRES
-        # ========================================
-        
-        st.markdown("### 🎁 Performance par Offre")
-        
-        if 'Offer' in df_temp.columns:
-            df_offers = df_temp[df_temp['Offer'].notna()]
-            
-            if len(df_offers) > 0:
-                col_off1, col_off2 = st.columns(2)
-                
-                with col_off1:
-                    st.markdown("#### Distribution Satisfaction")
-                    
-                    offer_sat = df_offers.groupby(['Offer', 'Satisfaction Score']).size().reset_index(name='Count')
-                    offer_totals = df_offers.groupby('Offer').size().reset_index(name='Total')
-                    offer_sat = offer_sat.merge(offer_totals, on='Offer')
-                    offer_sat['Percentage'] = (offer_sat['Count'] / offer_sat['Total']) * 100
-                    
-                    fig_offer = go.Figure()
-                    
-                    score_colors = {1: '#8B0000', 2: '#e74c3c', 3: '#f39c12', 4: '#27ae60', 5: '#2ecc71'}
-                    
-                    for score in [1, 2, 3, 4, 5]:
-                        data = offer_sat[offer_sat['Satisfaction Score'] == score]
-                        fig_offer.add_trace(go.Bar(
-                            x=data['Offer'],
-                            y=data['Percentage'],
-                            name=f'Score {score}',
-                            marker_color=score_colors[score],
-                            text=[f'{p:.0f}%' if p > 5 else '' for p in data['Percentage']],
-                            textposition='inside'
-                        ))
-                    
-                    fig_offer.update_layout(
-                        barmode='stack',
-                        template="plotly_dark",
-                        height=400
-                    )
-                    
-                    st.plotly_chart(fig_offer, use_container_width=True)
-                
-                with col_off2:
-                    st.markdown("#### Satisfaction vs Churn")
-                    
-                    offer_stats = df_offers.groupby('Offer').agg({
-                        'Satisfaction Score': 'mean',
-                        'Is_Churned': 'mean'
-                    }).round(2)
-                    
-                    offer_stats.columns = ['Sat', 'Churn']
-                    offer_stats['Churn'] = (offer_stats['Churn'] * 100).round(1)
-                    
-                    fig_perf = go.Figure()
-                    
-                    fig_perf.add_trace(go.Bar(
-                        x=offer_stats.index,
-                        y=offer_stats['Sat'],
-                        name='Satisfaction',
-                        marker=dict(
-                            color=offer_stats['Sat'],
-                            colorscale='RdYlGn',
-                            cmin=1,
-                            cmax=5
-                        ),
-                        text=[f"{s:.2f}" for s in offer_stats['Sat']],
-                        textposition='outside',
-                        yaxis='y1'
-                    ))
-                    
-                    fig_perf.add_trace(go.Scatter(
-                        x=offer_stats.index,
-                        y=offer_stats['Churn'],
-                        name='Churn %',
-                        mode='lines+markers+text',
-                        text=[f"{c:.0f}%" for c in offer_stats['Churn']],
-                        textposition='top center',
-                        marker=dict(size=12, color='#e74c3c'),
-                        line=dict(width=3, color='#e74c3c'),
-                        yaxis='y2'
-                    ))
-                    
-                    fig_perf.update_layout(
-                        template="plotly_dark",
-                        height=400,
-                        yaxis=dict(title="Satisfaction", range=[1, 5]),
-                        yaxis2=dict(title="Churn %", overlaying='y', side='right')
-                    )
-                    
-                    st.plotly_chart(fig_perf, use_container_width=True)
-        
-        st.markdown("---")
-        
-        # ========================================
-        # SECTION 6: IMPACT NPS
+        # SECTION 5: IMPACT NPS
         # ========================================
         
         st.markdown("### 🎯 Impact Business NPS")
@@ -2676,21 +2445,6 @@ def render_satisfaction_tab(df: pd.DataFrame):
             st.metric("Perte", f"${det_lost * 4149:,.0f}")
             st.metric("Potentiel", f"${int(det_lost * 0.5) * 4149:,.0f}")
         
-        potential = int(det_lost * 0.5) * 4149
-        
-        st.markdown(f"""
-        <div style='background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); 
-                    padding: 25px; border-radius: 15px; margin: 20px 0;'>
-            <h3 style='color: white;'>🚨 ACTION PRIORITAIRE</h3>
-            <p style='color: white; font-size: 16px;'>
-                <strong>Ratio {ratio:.1f}x</strong> - Detractors vs Promoters<br>
-                <strong>{det_lost:,} clients</strong> Detractors perdus<br><br>
-                
-                <strong style='color:#2ecc71;font-size:20px;'>💰 Gain: ${potential:,.0f}</strong>
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-        
         # ⭐⭐⭐ SIMULATEUR NPS ⭐⭐⭐
         st.markdown("---")
         integrate_simulator_in_satisfaction_tab(df_temp)
@@ -2700,7 +2454,6 @@ def render_satisfaction_tab(df: pd.DataFrame):
         st.error(f"❌ Erreur: {str(e)}")
         import traceback
         st.code(traceback.format_exc())
-
 
 # ------------------------------------------------
 
