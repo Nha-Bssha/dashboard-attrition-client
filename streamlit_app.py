@@ -2235,11 +2235,11 @@ def render_satisfaction_tab(df: pd.DataFrame):
         
         st.markdown("---")
         
-        # ========================================
-        # SECTION 4: CORRÉLATION ÂGE (SIMPLE)
-        # ========================================
-        
-        
+# ========================================
+# SECTION 4: ANALYSE ÂGE - VERSION BUSINESS 10/10
+# 1 seul graphique puissant + Actions chiffrées
+# ========================================
+
         st.markdown("### 💰 Impact Âge : Churn & Revenue à Risque")
         
         if 'Age' in df_temp.columns:
@@ -2415,29 +2415,29 @@ def render_satisfaction_tab(df: pd.DataFrame):
                                     color = "#3498db"
                                 
                                 st.markdown(f"""
-                                <div style="background: {color}22; padding: 12px; border-radius: 8px; border-left: 4px solid {color}; margin-bottom: 12px;">
-                                    <div style="font-size: 11px; color: #888; margin-bottom: 5px;">{icon} {priority_label}</div>
-                                    <div style="font-size: 20px; font-weight: 700; color: {color}; margin-bottom: 8px;">{segment['Age_Group']}</div>
-                                    
-                                    <div style="font-size: 12px; line-height: 1.6;">
-                                        <strong>{int(segment['Population']):,}</strong> clients ({segment['Population']/len(df_clean)*100:.1f}%)<br>
-                                        Churn: <strong style="color:{color};">{segment['Churn_Rate']:.0f}%</strong> vs {churn_global:.0f}% global<br>
-                                        Satisfaction: <strong>{segment['Avg_Satisfaction']:.2f}/5</strong><br>
-                                    </div>
-                                    
-                                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid {color}44;">
-                                        <div style="font-size: 11px; color: #aaa;">💰 Perte annuelle</div>
-                                        <div style="font-size: 16px; font-weight: 700; color: {color};">${segment['Revenue_At_Risk']/1000:.0f}K</div>
-                                        
-                                        <div style="font-size: 11px; color: #aaa; margin-top: 5px;">📈 Gain potentiel</div>
-                                        <div style="font-size: 14px; font-weight: 600; color: #27ae60;">${segment['Potential_Gain']/1000:.0f}K</div>
-                                    </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                        
-                        # Actions recommandées
-                        worst_segment = top_segments.iloc[0]
-                        
+                        <div style="background: {color}22; padding: 12px; border-radius: 8px; border-left: 4px solid {color}; margin-bottom: 12px;">
+                            <div style="font-size: 11px; color: #888; margin-bottom: 5px;">{icon} {priority_label}</div>
+                            <div style="font-size: 20px; font-weight: 700; color: {color}; margin-bottom: 8px;">{segment['Age_Group']}</div>
+                            
+                            <div style="font-size: 12px; line-height: 1.6;">
+                                <strong>{int(segment['Population']):,}</strong> clients ({segment['Population']/len(df_clean)*100:.1f}%)<br>
+                                Churn: <strong style="color:{color};">{segment['Churn_Rate']:.0f}%</strong> vs {churn_global:.0f}% global<br>
+                                Satisfaction: <strong>{segment['Avg_Satisfaction']:.2f}/5</strong><br>
+                            </div>
+                            
+                            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid {color}44;">
+                                <div style="font-size: 11px; color: #aaa;">💰 Perte annuelle</div>
+                                <div style="font-size: 16px; font-weight: 700; color: {color};">${segment['Revenue_At_Risk']/1000:.0f}K</div>
+                                
+                                <div style="font-size: 11px; color: #aaa; margin-top: 5px;">📈 Gain potentiel</div>
+                                <div style="font-size: 14px; font-weight: 600; color: #27ae60;">${segment['Potential_Gain']/1000:.0f}K</div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    # Actions recommandées
+                    worst_segment = top_segments.iloc[0]
+                    
                         if '70+' in worst_segment['Age_Group'] or '60-69' in worst_segment['Age_Group']:
                             action = "Programme Seniors Premium"
                             tactics = "• Tech Support dédié<br>• Interface simplifiée<br>• Tarif senior -15%"
@@ -2524,6 +2524,9 @@ def render_satisfaction_tab(df: pd.DataFrame):
                 st.code(traceback.format_exc())
         
         st.markdown("---")
+
+
+
     
         # ========================================
         # SECTION 5: OFFRES
