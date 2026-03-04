@@ -1,6 +1,8 @@
-""" <html><head></head><body><h1 id='sample'>My """
+"""
 🎯 DASHBOARD TELCO CHURN - VERSION PREMIUM 2.0
 Score Cible: 10/10
+...
+"""
 
 Architecture:
 - ✅ Gestion d'erreurs bulletproof
@@ -12,7 +14,7 @@ Architecture:
 - ✅ Loading states élégants
 
 Date: 17/02/2024
-"""
+
 import streamlit as st
 import pandas as pd
 import numpy as np
